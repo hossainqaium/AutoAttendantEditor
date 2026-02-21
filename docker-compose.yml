@@ -1,0 +1,72 @@
+version: '3.9'
+
+# =============================================================================
+# IVR Studio — Docker Compose
+# Deploys ONLY the API server and Studio UI.
+# FreeSWITCH/FusionPBX is already running on the host — we do NOT containerize it.
+#
+# Prerequisites:
+#   1. FusionPBX/FreeSWITCH running on the host with PostgreSQL accessible
+#   2. Run database migration: npm run migrate (from api-server/)
+#   3. Copy lua-engine/ to /usr/share/freeswitch/scripts/ivr_studio/ on the host
+# =============================================================================
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # API Server (Fastify + Node.js)
+  # ---------------------------------------------------------------------------
+  api:
+    build:
+      context: ./api-server
+      dockerfile: Dockerfile
+    container_name: ivr-studio-api
+    restart: unless-stopped
+    environment:
+      NODE_ENV:        production
+      PORT:            "3001"
+      HOST:            "0.0.0.0"
+      LOG_LEVEL:       "info"
+      # ── FusionPBX PostgreSQL connection ──────────────────────────────────
+      # Use host.docker.internal to reach the host's PostgreSQL from container.
+      # On Linux, use the host's IP (e.g. 172.17.0.1) or --network=host.
+      DB_HOST:         ${DB_HOST:-host.docker.internal}
+      DB_PORT:         ${DB_PORT:-5432}
+      DB_NAME:         ${DB_NAME:-fusionpbx}
+      DB_USER:         ${DB_USER:-fusionpbx}
+      DB_PASSWORD:     ${DB_PASSWORD:-fusionpbx}
+      DB_POOL_MAX:     "10"
+      # ── Secret encryption key (32-byte hex) ──────────────────────────────
+      IVR_SECRET_KEY:  ${IVR_SECRET_KEY:?IVR_SECRET_KEY env var is required}
+      STUDIO_ORIGIN:   "http://localhost:5173"
+    ports:
+      - "3001:3001"
+    networks:
+      - ivr-studio
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3001/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+
+  # ---------------------------------------------------------------------------
+  # Studio UI (Vite build served by Nginx)
+  # ---------------------------------------------------------------------------
+  ui:
+    build:
+      context: ./studio-ui
+      dockerfile: Dockerfile
+      args:
+        VITE_API_URL: "/api"
+    container_name: ivr-studio-ui
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      - api
+    networks:
+      - ivr-studio
+
+networks:
+  ivr-studio:
+    driver: bridge

@@ -1,0 +1,21 @@
+{
+  "name": "ivr-studio-api",
+  "version": "1.0.0",
+  "description": "IVR Studio API Server — FusionPBX integration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "node scripts/migrate.js"
+  },
+  "dependencies": {
+    "@fastify/cors": "^9.0.1",
+    "fastify": "^4.28.1",
+    "pg": "^8.12.0",
+    "pino-pretty": "^11.2.2"
+  },
+  "devDependencies": {},
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
