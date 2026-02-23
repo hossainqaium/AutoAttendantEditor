@@ -14,10 +14,11 @@ import {
 import { validateAndCompile } from './compiler/graphCompiler';
 import {
   Phone, GitBranch, RefreshCw, Check, AlertTriangle,
-  Plus, Upload, RotateCcw, Trash2, Key, List, LayoutTemplate, PhoneCall,
+  Plus, Upload, RotateCcw, Trash2, Key, List, LayoutTemplate, PhoneCall, Music,
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { TemplatesModal } from './components/TemplatesModal';
+import { AudioManagerModal } from './components/AudioManagerModal';
 import type { IvrTemplate, RouteType } from './api/client';
 
 type Tab = 'editor' | 'dids' | 'secrets' | 'logs';
@@ -47,7 +48,8 @@ export default function App() {
   const [dids, setDids] = useState<DidRoute[]>([]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [showVersions, setShowVersions] = useState(false);
-  const [showTemplates, setShowTemplates] = useState(false);
+  const [showTemplates, setShowTemplates]       = useState(false);
+  const [showAudioManager, setShowAudioManager] = useState(false);
   // Quick-assign extension state (shown inline in the flow sidebar)
   const [quickAssignFlowId, setQuickAssignFlowId] = useState<string | null>(null);
   const [quickDest, setQuickDest] = useState('');
@@ -311,6 +313,14 @@ export default function App() {
           <LayoutTemplate size={13} /> Templates
         </button>
 
+        {/* Audio Manager button */}
+        <button
+          onClick={() => setShowAudioManager(true)}
+          className="flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium text-emerald-600 border border-emerald-200 hover:bg-emerald-50 transition-colors"
+        >
+          <Music size={13} /> Audio Files
+        </button>
+
         {/* Tab nav */}
         <nav className="flex gap-1 ml-2">
           {([
@@ -545,6 +555,14 @@ export default function App() {
         <TemplatesModal
           onClose={() => setShowTemplates(false)}
           onLoad={handleLoadTemplate}
+        />
+      )}
+
+      {/* Audio Manager modal */}
+      {showAudioManager && selectedDomain && (
+        <AudioManagerModal
+          domainUuid={selectedDomain.domain_uuid}
+          onClose={() => setShowAudioManager(false)}
         />
       )}
 

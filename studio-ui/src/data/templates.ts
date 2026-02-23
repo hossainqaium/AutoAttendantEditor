@@ -26,6 +26,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n5', type: 'transfer',   position: { x: 440, y: 320 }, data: { label: 'Billing',       destination: '1003', transfer_type: 'blind' } },
         { id: 'n6', type: 'transfer',   position: { x: 620, y: 320 }, data: { label: 'Operator',      destination: '0',    transfer_type: 'blind' } },
         { id: 'n7', type: 'voicemail',  position: { x: 300, y: 460 }, data: { label: 'No Input → VM', mailbox_id: '1000' } },
+        { id: 'n8', type: 'hangup',     position: { x: 300, y: 580 }, data: { label: 'Hangup',         cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2', source: 'n1', target: 'n2' },
@@ -34,6 +35,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e2-5', source: 'n2', target: 'n5', sourceHandle: '3' },
         { id: 'e2-6', source: 'n2', target: 'n6', sourceHandle: '0' },
         { id: 'e2-7', source: 'n2', target: 'n7', sourceHandle: 'timeout' },
+        { id: 'e7-8', source: 'n7', target: 'n8' },
       ],
     },
   },
@@ -53,6 +55,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n5', type: 'transfer',       position: { x: 200, y: 460 }, data: { label: 'Support',         destination: '1002', transfer_type: 'blind' } },
         { id: 'n6', type: 'play_audio',     position: { x: 500, y: 200 }, data: { label: 'Closed: Message', file: 'ivr/ivr-please_try_again.wav' } },
         { id: 'n7', type: 'voicemail',      position: { x: 500, y: 340 }, data: { label: 'After Hours VM',  mailbox_id: '1000' } },
+        { id: 'n8', type: 'hangup',         position: { x: 500, y: 460 }, data: { label: 'Hangup',           cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2', source: 'n1', target: 'n2', sourceHandle: 'open'   },
@@ -61,6 +64,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e3-4', source: 'n3', target: 'n4', sourceHandle: '1' },
         { id: 'e3-5', source: 'n3', target: 'n5', sourceHandle: '2' },
         { id: 'e6-7', source: 'n6', target: 'n7' },
+        { id: 'e7-8', source: 'n7', target: 'n8' },
       ],
     },
   },
@@ -171,6 +175,8 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n9',  type: 'voicemail',     position: { x: 160, y: 600 }, data: { label: 'No Input → VM',   mailbox_id: '1000' } },
         { id: 'n10', type: 'play_audio',    position: { x: 580, y: 320 }, data: { label: 'After Hours Msg', file: 'ivr/ivr-not_available.wav' } },
         { id: 'n11', type: 'voicemail',     position: { x: 580, y: 460 }, data: { label: 'After Hours VM',  mailbox_id: '1000' } },
+        { id: 'n12', type: 'hangup',        position: { x: 160, y: 720 }, data: { label: 'Hangup',          cause: 'NORMAL_CLEARING' } },
+        { id: 'n13', type: 'hangup',        position: { x: 580, y: 580 }, data: { label: 'Hangup',          cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2',   source: 'n1',  target: 'n2'  },
@@ -183,6 +189,8 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e3-8',   source: 'n3',  target: 'n8',  sourceHandle: '0' },
         { id: 'e3-9',   source: 'n3',  target: 'n9',  sourceHandle: 'timeout' },
         { id: 'e10-11', source: 'n10', target: 'n11' },
+        { id: 'e9-12',  source: 'n9',  target: 'n12' },
+        { id: 'e11-13', source: 'n11', target: 'n13' },
       ],
     },
   },
@@ -203,17 +211,21 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n6', type: 'transfer',   position: { x: 600, y: 320 }, data: { label: 'Takeaway Orders',  destination: '1003', transfer_type: 'blind' } },
         { id: 'n7', type: 'play_audio', position: { x: 240, y: 460 }, data: { label: 'Goodbye',          file: 'ivr/ivr-thank_you.wav' } },
         { id: 'n8', type: 'hangup',     position: { x: 240, y: 560 }, data: { label: 'Hangup',           cause: 'NORMAL_CLEARING' } },
-        { id: 'n9', type: 'voicemail',  position: { x: 300, y: 440 }, data: { label: 'No Input → VM',    mailbox_id: '1000' } },
+        { id: 'n9',  type: 'voicemail',  position: { x: 300, y: 440 }, data: { label: 'No Input → VM',    mailbox_id: '1000' } },
+        { id: 'n10', type: 'hangup',     position: { x: 300, y: 560 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
+        { id: 'n11', type: 'hangup',     position: { x: 420, y: 440 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
-        { id: 'e1-2', source: 'n1', target: 'n2' },
-        { id: 'e2-3', source: 'n2', target: 'n3', sourceHandle: '1' },
-        { id: 'e2-4', source: 'n2', target: 'n4', sourceHandle: '2' },
-        { id: 'e2-5', source: 'n2', target: 'n5', sourceHandle: '3' },
-        { id: 'e2-6', source: 'n2', target: 'n6', sourceHandle: '4' },
-        { id: 'e2-9', source: 'n2', target: 'n9', sourceHandle: 'timeout' },
-        { id: 'e4-7', source: 'n4', target: 'n7' },
-        { id: 'e7-8', source: 'n7', target: 'n8' },
+        { id: 'e1-2',  source: 'n1', target: 'n2' },
+        { id: 'e2-3',  source: 'n2', target: 'n3', sourceHandle: '1' },
+        { id: 'e2-4',  source: 'n2', target: 'n4', sourceHandle: '2' },
+        { id: 'e2-5',  source: 'n2', target: 'n5', sourceHandle: '3' },
+        { id: 'e2-6',  source: 'n2', target: 'n6', sourceHandle: '4' },
+        { id: 'e2-9',  source: 'n2', target: 'n9', sourceHandle: 'timeout' },
+        { id: 'e4-7',  source: 'n4', target: 'n7' },
+        { id: 'e7-8',  source: 'n7', target: 'n8' },
+        { id: 'e5-11', source: 'n5', target: 'n11' },
+        { id: 'e9-10', source: 'n9', target: 'n10' },
       ],
     },
   },
@@ -234,17 +246,19 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n6', type: 'transfer',   position: { x: 450, y: 320 }, data: { label: 'Housekeeping',   destination: '1004', transfer_type: 'blind' } },
         { id: 'n7', type: 'transfer',   position: { x: 600, y: 320 }, data: { label: 'Spa & Wellness', destination: '1005', transfer_type: 'blind' } },
         { id: 'n8', type: 'transfer',   position: { x: 750, y: 320 }, data: { label: 'Front Desk',     destination: '0',    transfer_type: 'blind' } },
-        { id: 'n9', type: 'voicemail',  position: { x: 360, y: 440 }, data: { label: 'No Input → VM',  mailbox_id: '1000' } },
+        { id: 'n9',  type: 'voicemail',  position: { x: 360, y: 440 }, data: { label: 'No Input → VM',  mailbox_id: '1000' } },
+        { id: 'n10', type: 'hangup',     position: { x: 360, y: 560 }, data: { label: 'Hangup',          cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
-        { id: 'e1-2', source: 'n1', target: 'n2' },
-        { id: 'e2-3', source: 'n2', target: 'n3', sourceHandle: '1' },
-        { id: 'e2-4', source: 'n2', target: 'n4', sourceHandle: '2' },
-        { id: 'e2-5', source: 'n2', target: 'n5', sourceHandle: '3' },
-        { id: 'e2-6', source: 'n2', target: 'n6', sourceHandle: '4' },
-        { id: 'e2-7', source: 'n2', target: 'n7', sourceHandle: '5' },
-        { id: 'e2-8', source: 'n2', target: 'n8', sourceHandle: '0' },
-        { id: 'e2-9', source: 'n2', target: 'n9', sourceHandle: 'timeout' },
+        { id: 'e1-2',  source: 'n1', target: 'n2' },
+        { id: 'e2-3',  source: 'n2', target: 'n3', sourceHandle: '1' },
+        { id: 'e2-4',  source: 'n2', target: 'n4', sourceHandle: '2' },
+        { id: 'e2-5',  source: 'n2', target: 'n5', sourceHandle: '3' },
+        { id: 'e2-6',  source: 'n2', target: 'n6', sourceHandle: '4' },
+        { id: 'e2-7',  source: 'n2', target: 'n7', sourceHandle: '5' },
+        { id: 'e2-8',  source: 'n2', target: 'n8', sourceHandle: '0' },
+        { id: 'e2-9',  source: 'n2', target: 'n9', sourceHandle: 'timeout' },
+        { id: 'e9-10', source: 'n9', target: 'n10' },
       ],
     },
   },
@@ -268,6 +282,9 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n9',  type: 'voicemail',     position: { x: 100, y: 600 }, data: { label: 'No Input → VM',     mailbox_id: '1000' } },
         { id: 'n10', type: 'play_audio',    position: { x: 520, y: 320 }, data: { label: 'After Hours Msg',   file: 'ivr/ivr-not_available.wav' } },
         { id: 'n11', type: 'voicemail',     position: { x: 520, y: 460 }, data: { label: 'After Hours VM',    mailbox_id: '1000' } },
+        { id: 'n12', type: 'hangup',        position: { x: 100, y: 720 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
+        { id: 'n13', type: 'hangup',        position: { x: 520, y: 580 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
+        { id: 'n14', type: 'hangup',        position: { x: 540, y: 600 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2',   source: 'n1',  target: 'n2'  },
@@ -280,6 +297,9 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e3-8',   source: 'n3',  target: 'n8',  sourceHandle: '0' },
         { id: 'e3-9',   source: 'n3',  target: 'n9',  sourceHandle: 'timeout' },
         { id: 'e10-11', source: 'n10', target: 'n11' },
+        { id: 'e9-12',  source: 'n9',  target: 'n12' },
+        { id: 'e11-13', source: 'n11', target: 'n13' },
+        { id: 'e7-14',  source: 'n7',  target: 'n14' },
       ],
     },
   },
@@ -302,6 +322,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n8',  type: 'transfer',   position: { x: 640, y: 440 }, data: { label: 'Online Banking',   destination: '1005', transfer_type: 'blind' } },
         { id: 'n9',  type: 'transfer',   position: { x: 800, y: 440 }, data: { label: 'Fraud Hotline',    destination: '1999', transfer_type: 'blind' } },
         { id: 'n10', type: 'voicemail',  position: { x: 400, y: 560 }, data: { label: 'No Input → VM',    mailbox_id: '1000' } },
+        { id: 'n11', type: 'hangup',    position: { x: 400, y: 680 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2',  source: 'n1',  target: 'n2' },
@@ -313,6 +334,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e3-8',  source: 'n3',  target: 'n8',  sourceHandle: '5' },
         { id: 'e3-9',  source: 'n3',  target: 'n9',  sourceHandle: '9' },
         { id: 'e3-10', source: 'n3',  target: 'n10', sourceHandle: 'timeout' },
+        { id: 'e10-11',source: 'n10', target: 'n11' },
       ],
     },
   },
@@ -329,21 +351,25 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n2', type: 'get_digits',   position: { x: 300, y: 160 }, data: { label: 'Emergency Menu',    prompt_file: 'ivr/ivr-please_choose_from_the_following.wav', min_digits: 1, max_digits: 1, timeout_ms: 8000, retries: 2, valid_digits: ['1','2','3'] } },
         { id: 'n3', type: 'play_audio',   position: { x: 80,  y: 320 }, data: { label: 'Routing Emergency', file: 'ivr/ivr-your_call_is_being_placed.wav' } },
         { id: 'n4', type: 'transfer',     position: { x: 80,  y: 440 }, data: { label: 'On-Call Engineer',  destination: '1099', transfer_type: 'blind' } },
-        { id: 'n5', type: 'voicemail',    position: { x: 300, y: 320 }, data: { label: 'Leave a Message',   mailbox_id: '1000' } },
-        { id: 'n6', type: 'set_variable', position: { x: 520, y: 320 }, data: { label: 'Flag Callback',     key: 'callback_requested', value: 'true' } },
-        { id: 'n7', type: 'play_audio',   position: { x: 520, y: 440 }, data: { label: 'Callback Confirm',  file: 'ivr/ivr-thank_you.wav' } },
-        { id: 'n8', type: 'hangup',       position: { x: 520, y: 540 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
-        { id: 'n9', type: 'voicemail',    position: { x: 300, y: 460 }, data: { label: 'No Input → VM',     mailbox_id: '1000' } },
+        { id: 'n5',  type: 'voicemail',    position: { x: 300, y: 320 }, data: { label: 'Leave a Message',   mailbox_id: '1000' } },
+        { id: 'n6',  type: 'set_variable', position: { x: 520, y: 320 }, data: { label: 'Flag Callback',     key: 'callback_requested', value: 'true' } },
+        { id: 'n7',  type: 'play_audio',   position: { x: 520, y: 440 }, data: { label: 'Callback Confirm',  file: 'ivr/ivr-thank_you.wav' } },
+        { id: 'n8',  type: 'hangup',       position: { x: 520, y: 540 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
+        { id: 'n9',  type: 'voicemail',    position: { x: 300, y: 460 }, data: { label: 'No Input → VM',     mailbox_id: '1000' } },
+        { id: 'n10', type: 'hangup',       position: { x: 300, y: 440 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
+        { id: 'n11', type: 'hangup',       position: { x: 300, y: 580 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
-        { id: 'e1-2', source: 'n1', target: 'n2' },
-        { id: 'e2-3', source: 'n2', target: 'n3', sourceHandle: '1' },
-        { id: 'e2-5', source: 'n2', target: 'n5', sourceHandle: '2' },
-        { id: 'e2-6', source: 'n2', target: 'n6', sourceHandle: '3' },
-        { id: 'e2-9', source: 'n2', target: 'n9', sourceHandle: 'timeout' },
-        { id: 'e3-4', source: 'n3', target: 'n4' },
-        { id: 'e6-7', source: 'n6', target: 'n7' },
-        { id: 'e7-8', source: 'n7', target: 'n8' },
+        { id: 'e1-2',  source: 'n1', target: 'n2' },
+        { id: 'e2-3',  source: 'n2', target: 'n3', sourceHandle: '1' },
+        { id: 'e2-5',  source: 'n2', target: 'n5', sourceHandle: '2' },
+        { id: 'e2-6',  source: 'n2', target: 'n6', sourceHandle: '3' },
+        { id: 'e2-9',  source: 'n2', target: 'n9', sourceHandle: 'timeout' },
+        { id: 'e3-4',  source: 'n3', target: 'n4' },
+        { id: 'e6-7',  source: 'n6', target: 'n7' },
+        { id: 'e7-8',  source: 'n7', target: 'n8' },
+        { id: 'e5-10', source: 'n5', target: 'n10' },
+        { id: 'e9-11', source: 'n9', target: 'n11' },
       ],
     },
   },
@@ -1001,6 +1027,8 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n16', type: 'transfer',   position: { x: 960, y: 280 }, data: { label: 'Operator',          destination: '0',    transfer_type: 'blind' } },
         { id: 'n17', type: 'voicemail',  position: { x: 460, y: 560 }, data: { label: 'No Input → VM',     mailbox_id: '1000' } },
         { id: 'n18', type: 'transfer',   position: { x: 80,  y: 560 }, data: { label: 'Back to Main',      destination: '{{dnis}}', transfer_type: 'blind' } },
+        { id: 'n19', type: 'hangup',     position: { x: 620, y: 680 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
+        { id: 'n20', type: 'hangup',     position: { x: 460, y: 680 }, data: { label: 'Hangup',            cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2',   source: 'n1',  target: 'n2'  },
@@ -1023,6 +1051,8 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e13-14', source: 'n13', target: 'n14', sourceHandle: '1' },
         { id: 'e13-15', source: 'n13', target: 'n15', sourceHandle: '2' },
         { id: 'e13-18', source: 'n13', target: 'n18', sourceHandle: '9' },
+        { id: 'e11-19', source: 'n11', target: 'n19' },
+        { id: 'e17-20', source: 'n17', target: 'n20' },
       ],
     },
   },
@@ -1053,6 +1083,8 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n16', type: 'transfer',      position: { x: 540, y: 540 }, data: { label: 'Emergency Line',      destination: '9001', transfer_type: 'blind' } },
         { id: 'n17', type: 'voicemail',     position: { x: 720, y: 540 }, data: { label: 'After Hours VM',      mailbox_id: '1000' } },
         { id: 'n18', type: 'transfer',      position: { x: 0,   y: 600 }, data: { label: 'Back to Main',        destination: '{{dnis}}', transfer_type: 'blind' } },
+        { id: 'n19', type: 'hangup',        position: { x: 200, y: 680 }, data: { label: 'Hangup',              cause: 'NORMAL_CLEARING' } },
+        { id: 'n20', type: 'hangup',        position: { x: 720, y: 660 }, data: { label: 'Hangup',              cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2',   source: 'n1',  target: 'n2'  },
@@ -1073,6 +1105,8 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e14-15', source: 'n14', target: 'n15' },
         { id: 'e15-16', source: 'n15', target: 'n16', sourceHandle: '1' },
         { id: 'e15-17', source: 'n15', target: 'n17', sourceHandle: '2' },
+        { id: 'e13-19', source: 'n13', target: 'n19' },
+        { id: 'e17-20', source: 'n17', target: 'n20' },
       ],
     },
   },
@@ -1107,6 +1141,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'n20', type: 'transfer',   position: { x: 1100,y: 400 }, data: { label: 'Operator',            destination: '0',    transfer_type: 'blind' } },
         { id: 'n21', type: 'transfer',   position: { x: 80,  y: 820 }, data: { label: 'Back to Main',        destination: '{{dnis}}', transfer_type: 'blind' } },
         { id: 'n22', type: 'voicemail',  position: { x: 460, y: 400 }, data: { label: 'No Input → VM',       mailbox_id: '1000' } },
+        { id: 'n23', type: 'hangup',    position: { x: 460, y: 520 }, data: { label: 'Hangup',               cause: 'NORMAL_CLEARING' } },
       ],
       edges: [
         { id: 'e1-2',   source: 'n1',  target: 'n2'  },
@@ -1117,6 +1152,7 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e3-19',  source: 'n3',  target: 'n19', sourceHandle: '4' },
         { id: 'e3-20',  source: 'n3',  target: 'n20', sourceHandle: '0' },
         { id: 'e3-22',  source: 'n3',  target: 'n22', sourceHandle: 'timeout' },
+        { id: 'e22-23', source: 'n22', target: 'n23' },
         { id: 'e4-5',   source: 'n4',  target: 'n5',  sourceHandle: 'success' },
         { id: 'e4-8',   source: 'n4',  target: 'n8',  sourceHandle: 'error'   },
         { id: 'e4-8t',  source: 'n4',  target: 'n8',  sourceHandle: 'timeout' },
@@ -1333,6 +1369,286 @@ export const TEMPLATES: IvrTemplate[] = [
         { id: 'e29-32', source: 'n29', target: 'n32', sourceHandle: '3' },
         { id: 'e29-33', source: 'n29', target: 'n33', sourceHandle: '4' },
         { id: 'e29-34', source: 'n29', target: 'n34', sourceHandle: '9' },
+      ],
+    },
+  },
+
+  // ── Complex API-Driven Templates (AND/OR conditions) ──────────────────────
+
+  {
+    id: 'api_multi_variable_routing',
+    name: 'Multi-Variable API Response Routing',
+    description: 'API returns tier, status, balance, and risk score. A single multi-branch condition with AND/OR clauses routes to 4 different queues + else. Demonstrates complex per-branch logic on a single node.',
+    category: 'API-Driven',
+    icon: 'layers',
+    graph: {
+      nodes: [
+        // ── Entry ──
+        { id: 'n1',  type: 'play_audio',   position: { x: 500, y: 0   }, data: { label: 'Welcome',               file: 'ivr/ivr-thank_you_for_calling.wav' } },
+        { id: 'n2',  type: 'get_digits',   position: { x: 500, y: 120 }, data: { label: 'Enter Account No.',      prompt_file: 'ivr/ivr-please_enter_extension_followed_by_pound.wav', min_digits: 6, max_digits: 10, timeout_ms: 10000, retries: 3, valid_digits: ['0','1','2','3','4','5','6','7','8','9'] } },
+        { id: 'n3',  type: 'set_variable', position: { x: 500, y: 240 }, data: { label: 'Store Account ID',       key: 'account_id', value: '{{digits}}' } },
+
+        // ── API Call: fetch rich account profile ──
+        { id: 'n4',  type: 'api_call',     position: { x: 500, y: 360 }, data: {
+          label: 'API: Fetch Account Profile',
+          url: 'https://api.example.com/accounts/{{account_id}}/profile',
+          method: 'GET',
+          timeout_ms: 5000,
+          response_map: [
+            { json_path: '$.tier',            variable: 'tier'            },
+            { json_path: '$.status',          variable: 'status'          },
+            { json_path: '$.balance_overdue', variable: 'balance_overdue' },
+            { json_path: '$.risk_score',      variable: 'risk_score'      },
+            { json_path: '$.preferred_lang',  variable: 'preferred_lang'  },
+          ],
+        } },
+
+        // ── API Error path ──
+        { id: 'n5',  type: 'play_audio',   position: { x: 820, y: 440 }, data: { label: 'Service Unavailable',   file: 'ivr/ivr-please_try_again.wav' } },
+        { id: 'n6',  type: 'transfer',     position: { x: 820, y: 560 }, data: { label: 'Fallback Agent',        destination: '0',    transfer_type: 'blind' } },
+
+        // ── Multi-Branch Condition with AND/OR clauses ──
+        // Branch 1: tier == 'vip' AND status == 'active'           → VIP Active queue
+        // Branch 2: tier == 'vip' AND status != 'active'           → VIP Reactivation
+        // Branch 3: balance_overdue == 'true' AND risk_score > '70' → Collections Priority
+        // Branch 4: tier == 'premium' OR tier == 'gold'            → Premium queue
+        // Else: Standard queue
+        { id: 'n7',  type: 'condition',    position: { x: 500, y: 520 }, data: {
+          label: 'Route by Profile',
+          branches: [
+            {
+              id: 'b_vip_active',
+              label: 'VIP Active',
+              clauses: [
+                { id: 'c1a', variable: 'tier',   operator: 'eq',  value: 'vip' },
+                { id: 'c1b', variable: 'status', operator: 'eq',  value: 'active', join: 'and' },
+              ],
+            },
+            {
+              id: 'b_vip_inactive',
+              label: 'VIP Inactive',
+              clauses: [
+                { id: 'c2a', variable: 'tier',   operator: 'eq',  value: 'vip'    },
+                { id: 'c2b', variable: 'status', operator: 'neq', value: 'active', join: 'and' },
+              ],
+            },
+            {
+              id: 'b_collections',
+              label: 'Collections',
+              clauses: [
+                { id: 'c3a', variable: 'balance_overdue', operator: 'eq', value: 'true' },
+                { id: 'c3b', variable: 'risk_score',      operator: 'gt', value: '70',   join: 'and' },
+              ],
+            },
+            {
+              id: 'b_premium',
+              label: 'Premium / Gold',
+              clauses: [
+                { id: 'c4a', variable: 'tier', operator: 'eq', value: 'premium' },
+                { id: 'c4b', variable: 'tier', operator: 'eq', value: 'gold',   join: 'or' },
+              ],
+            },
+          ],
+        } },
+
+        // ── Branch destinations (all at same vertical level) ──
+        { id: 'n8',  type: 'play_audio',   position: { x: 0,   y: 700 }, data: { label: 'VIP Active Welcome',    file: 'ivr/ivr-thank_you_for_calling.wav' } },
+        { id: 'n9',  type: 'transfer',     position: { x: 0,   y: 820 }, data: { label: 'VIP Priority Queue',    destination: '1010', transfer_type: 'blind' } },
+
+        { id: 'n10', type: 'play_audio',   position: { x: 220, y: 700 }, data: { label: 'VIP Reactivation Msg',  file: 'ivr/ivr-not_available.wav' } },
+        { id: 'n11', type: 'get_digits',   position: { x: 220, y: 820 }, data: { label: 'Reactivation Options',  prompt_file: 'ivr/ivr-please_choose_from_the_following.wav', min_digits: 1, max_digits: 1, timeout_ms: 6000, retries: 2, valid_digits: ['1','2','0'] } },
+        { id: 'n12', type: 'transfer',     position: { x: 140, y: 960 }, data: { label: 'Billing (Reactivate)',  destination: '1002', transfer_type: 'blind' } },
+        { id: 'n13', type: 'transfer',     position: { x: 300, y: 960 }, data: { label: 'VIP Retention Team',   destination: '1015', transfer_type: 'blind' } },
+        { id: 'n14', type: 'transfer',     position: { x: 460, y: 960 }, data: { label: 'Operator',             destination: '0',    transfer_type: 'blind' } },
+
+        { id: 'n15', type: 'play_audio',   position: { x: 500, y: 700 }, data: { label: 'Collections Notice',   file: 'ivr/ivr-one_moment_please.wav' } },
+        { id: 'n16', type: 'get_digits',   position: { x: 500, y: 820 }, data: { label: 'Collections Menu',     prompt_file: 'ivr/ivr-please_choose_from_the_following.wav', min_digits: 1, max_digits: 1, timeout_ms: 6000, retries: 2, valid_digits: ['1','2','0'] } },
+        { id: 'n17', type: 'transfer',     position: { x: 440, y: 960 }, data: { label: 'Pay Now (IVR)',         destination: '1099', transfer_type: 'blind' } },
+        { id: 'n18', type: 'transfer',     position: { x: 600, y: 960 }, data: { label: 'Collections Agent',    destination: '1020', transfer_type: 'blind' } },
+        { id: 'n19', type: 'transfer',     position: { x: 760, y: 960 }, data: { label: 'Operator',             destination: '0',    transfer_type: 'blind' } },
+
+        { id: 'n20', type: 'play_audio',   position: { x: 760, y: 700 }, data: { label: 'Premium Welcome',      file: 'ivr/ivr-thank_you_for_calling.wav' } },
+        { id: 'n21', type: 'transfer',     position: { x: 760, y: 820 }, data: { label: 'Premium Queue',        destination: '1002', transfer_type: 'blind' } },
+
+        { id: 'n22', type: 'transfer',     position: { x: 1000,y: 700 }, data: { label: 'Standard Queue',       destination: '1003', transfer_type: 'blind' } },
+      ],
+      edges: [
+        { id: 'e1-2',  source: 'n1',  target: 'n2'  },
+        { id: 'e2-3',  source: 'n2',  target: 'n3'  },
+        { id: 'e3-4',  source: 'n3',  target: 'n4'  },
+        // API results
+        { id: 'e4-7',  source: 'n4',  target: 'n7',  sourceHandle: 'success' },
+        { id: 'e4-5',  source: 'n4',  target: 'n5',  sourceHandle: 'error'   },
+        { id: 'e4-5t', source: 'n4',  target: 'n5',  sourceHandle: 'timeout' },
+        { id: 'e5-6',  source: 'n5',  target: 'n6'  },
+        // Multi-branch condition outputs
+        { id: 'e7-8',  source: 'n7',  target: 'n8',  sourceHandle: 'b_vip_active'   },
+        { id: 'e7-10', source: 'n7',  target: 'n10', sourceHandle: 'b_vip_inactive' },
+        { id: 'e7-15', source: 'n7',  target: 'n15', sourceHandle: 'b_collections'  },
+        { id: 'e7-20', source: 'n7',  target: 'n20', sourceHandle: 'b_premium'      },
+        { id: 'e7-22', source: 'n7',  target: 'n22', sourceHandle: 'else'           },
+        // VIP Active path
+        { id: 'e8-9',  source: 'n8',  target: 'n9'  },
+        // VIP Inactive path
+        { id: 'e10-11',source: 'n10', target: 'n11' },
+        { id: 'e11-12',source: 'n11', target: 'n12', sourceHandle: '1' },
+        { id: 'e11-13',source: 'n11', target: 'n13', sourceHandle: '2' },
+        { id: 'e11-14',source: 'n11', target: 'n14', sourceHandle: '0' },
+        // Collections path
+        { id: 'e15-16',source: 'n15', target: 'n16' },
+        { id: 'e16-17',source: 'n16', target: 'n17', sourceHandle: '1' },
+        { id: 'e16-18',source: 'n16', target: 'n18', sourceHandle: '2' },
+        { id: 'e16-19',source: 'n16', target: 'n19', sourceHandle: '0' },
+        // Premium path
+        { id: 'e20-21',source: 'n20', target: 'n21' },
+      ],
+    },
+  },
+
+  {
+    id: 'api_parallel_conditions',
+    name: 'API Parallel Condition Checks',
+    description: 'After one API call, three separate condition nodes evaluate different response fields in parallel — language, account health (AND: overdue + risk), and service type (OR: product variants) — each routing to distinct destinations.',
+    category: 'API-Driven',
+    icon: 'routing',
+    graph: {
+      nodes: [
+        // ── Entry ──
+        { id: 'n1',  type: 'play_audio',   position: { x: 460, y: 0   }, data: { label: 'Welcome',               file: 'ivr/ivr-thank_you_for_calling.wav' } },
+        { id: 'n2',  type: 'play_audio',   position: { x: 460, y: 120 }, data: { label: 'Security Notice',       file: 'ivr/ivr-this_call_may_be_recorded.wav' } },
+
+        // ── API Call: single call returns multiple routing dimensions ──
+        { id: 'n3',  type: 'api_call',     position: { x: 460, y: 240 }, data: {
+          label: 'API: Caller Intelligence',
+          url: 'https://api.example.com/caller/intelligence?ani={{ani}}',
+          method: 'GET',
+          timeout_ms: 4000,
+          response_map: [
+            { json_path: '$.lang',            variable: 'caller_lang'     },
+            { json_path: '$.overdue',         variable: 'is_overdue'      },
+            { json_path: '$.risk',            variable: 'risk_level'      },
+            { json_path: '$.product',         variable: 'product_type'    },
+            { json_path: '$.vip',             variable: 'is_vip'          },
+          ],
+        } },
+
+        // ── API error ──
+        { id: 'n4',  type: 'play_audio',   position: { x: 740, y: 340 }, data: { label: 'API Error Msg',         file: 'ivr/ivr-please_try_again.wav' } },
+        { id: 'n5',  type: 'transfer',     position: { x: 740, y: 460 }, data: { label: 'Fallback Queue',        destination: '0',    transfer_type: 'blind' } },
+
+        // ── Condition 1: Language routing (same-level condition check #1) ──
+        { id: 'n6',  type: 'condition',    position: { x: 100, y: 400 }, data: {
+          label: 'Language Check',
+          branches: [
+            {
+              id: 'lang_es',
+              label: 'Spanish',
+              clauses: [{ id: 'lc1', variable: 'caller_lang', operator: 'eq', value: 'es' }],
+            },
+            {
+              id: 'lang_fr',
+              label: 'French',
+              clauses: [{ id: 'lc2', variable: 'caller_lang', operator: 'eq', value: 'fr' }],
+            },
+          ],
+        } },
+        { id: 'n7',  type: 'transfer',     position: { x: 0,   y: 580 }, data: { label: 'Spanish Queue',         destination: '2001', transfer_type: 'blind' } },
+        { id: 'n8',  type: 'transfer',     position: { x: 160, y: 580 }, data: { label: 'French Queue',          destination: '2002', transfer_type: 'blind' } },
+        { id: 'n9',  type: 'transfer',     position: { x: 320, y: 580 }, data: { label: 'English Queue',         destination: '2003', transfer_type: 'blind' } },
+
+        // ── Condition 2: Account health (AND logic) (same-level check #2) ──
+        { id: 'n10', type: 'condition',    position: { x: 460, y: 400 }, data: {
+          label: 'Account Health',
+          branches: [
+            {
+              id: 'high_risk_overdue',
+              label: 'High-Risk Overdue',
+              clauses: [
+                { id: 'hc1', variable: 'is_overdue',  operator: 'eq', value: 'true' },
+                { id: 'hc2', variable: 'risk_level',  operator: 'gt', value: '60',   join: 'and' },
+              ],
+            },
+            {
+              id: 'overdue_only',
+              label: 'Overdue (Low Risk)',
+              clauses: [
+                { id: 'hc3', variable: 'is_overdue',  operator: 'eq', value: 'true' },
+                { id: 'hc4', variable: 'risk_level',  operator: 'lte',value: '60',   join: 'and' },
+              ],
+            },
+            {
+              id: 'vip_account',
+              label: 'VIP',
+              clauses: [{ id: 'hc5', variable: 'is_vip', operator: 'eq', value: 'true' }],
+            },
+          ],
+        } },
+        { id: 'n11', type: 'play_audio',   position: { x: 380, y: 580 }, data: { label: 'Collections Notice',    file: 'ivr/ivr-one_moment_please.wav' } },
+        { id: 'n12', type: 'transfer',     position: { x: 380, y: 700 }, data: { label: 'Collections Priority', destination: '1099', transfer_type: 'blind' } },
+        { id: 'n13', type: 'transfer',     position: { x: 540, y: 580 }, data: { label: 'Billing (Overdue)',     destination: '1002', transfer_type: 'blind' } },
+        { id: 'n14', type: 'transfer',     position: { x: 680, y: 580 }, data: { label: 'VIP Queue',             destination: '1010', transfer_type: 'blind' } },
+        { id: 'n15', type: 'transfer',     position: { x: 820, y: 580 }, data: { label: 'Standard Queue',        destination: '1003', transfer_type: 'blind' } },
+
+        // ── Condition 3: Product / service type (OR logic) (same-level check #3) ──
+        { id: 'n16', type: 'condition',    position: { x: 880, y: 400 }, data: {
+          label: 'Product Routing',
+          branches: [
+            {
+              id: 'enterprise_prod',
+              label: 'Enterprise',
+              clauses: [
+                { id: 'pc1', variable: 'product_type', operator: 'eq', value: 'enterprise'        },
+                { id: 'pc2', variable: 'product_type', operator: 'eq', value: 'enterprise_plus',  join: 'or' },
+              ],
+            },
+            {
+              id: 'cloud_prod',
+              label: 'Cloud / SaaS',
+              clauses: [
+                { id: 'pc3', variable: 'product_type', operator: 'eq', value: 'cloud'  },
+                { id: 'pc4', variable: 'product_type', operator: 'eq', value: 'saas',  join: 'or' },
+              ],
+            },
+            {
+              id: 'legacy_prod',
+              label: 'Legacy / On-Prem',
+              clauses: [
+                { id: 'pc5', variable: 'product_type', operator: 'eq', value: 'legacy'  },
+                { id: 'pc6', variable: 'product_type', operator: 'eq', value: 'on_prem', join: 'or' },
+              ],
+            },
+          ],
+        } },
+        { id: 'n17', type: 'transfer',     position: { x: 800, y: 580 }, data: { label: 'Enterprise Team',       destination: '3001', transfer_type: 'blind' } },
+        { id: 'n18', type: 'transfer',     position: { x: 960, y: 580 }, data: { label: 'Cloud Support',         destination: '3002', transfer_type: 'blind' } },
+        { id: 'n19', type: 'transfer',     position: { x: 1120,y: 580 }, data: { label: 'Legacy Support',        destination: '3003', transfer_type: 'blind' } },
+        { id: 'n20', type: 'transfer',     position: { x: 1280,y: 580 }, data: { label: 'General Product',       destination: '3004', transfer_type: 'blind' } },
+      ],
+      edges: [
+        { id: 'e1-2',   source: 'n1',  target: 'n2'  },
+        { id: 'e2-3',   source: 'n2',  target: 'n3'  },
+        // API → 3 conditions in parallel + error path
+        { id: 'e3-6',   source: 'n3',  target: 'n6',  sourceHandle: 'success' },
+        { id: 'e3-10',  source: 'n3',  target: 'n10', sourceHandle: 'success' },
+        { id: 'e3-16',  source: 'n3',  target: 'n16', sourceHandle: 'success' },
+        { id: 'e3-4',   source: 'n3',  target: 'n4',  sourceHandle: 'error'   },
+        { id: 'e3-4t',  source: 'n3',  target: 'n4',  sourceHandle: 'timeout' },
+        { id: 'e4-5',   source: 'n4',  target: 'n5'  },
+        // Condition 1: Language
+        { id: 'e6-7',   source: 'n6',  target: 'n7',  sourceHandle: 'lang_es' },
+        { id: 'e6-8',   source: 'n6',  target: 'n8',  sourceHandle: 'lang_fr' },
+        { id: 'e6-9',   source: 'n6',  target: 'n9',  sourceHandle: 'else'    },
+        // Condition 2: Account health
+        { id: 'e10-11', source: 'n10', target: 'n11', sourceHandle: 'high_risk_overdue' },
+        { id: 'e10-13', source: 'n10', target: 'n13', sourceHandle: 'overdue_only'      },
+        { id: 'e10-14', source: 'n10', target: 'n14', sourceHandle: 'vip_account'       },
+        { id: 'e10-15', source: 'n10', target: 'n15', sourceHandle: 'else'              },
+        { id: 'e11-12', source: 'n11', target: 'n12' },
+        // Condition 3: Product
+        { id: 'e16-17', source: 'n16', target: 'n17', sourceHandle: 'enterprise_prod' },
+        { id: 'e16-18', source: 'n16', target: 'n18', sourceHandle: 'cloud_prod'      },
+        { id: 'e16-19', source: 'n16', target: 'n19', sourceHandle: 'legacy_prod'     },
+        { id: 'e16-20', source: 'n16', target: 'n20', sourceHandle: 'else'            },
       ],
     },
   },

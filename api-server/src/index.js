@@ -23,8 +23,9 @@ if (fs.existsSync(envFile)) {
   }
 }
 
-const Fastify = require('fastify');
-const cors    = require('@fastify/cors');
+const Fastify   = require('fastify');
+const cors      = require('@fastify/cors');
+const multipart = require('@fastify/multipart');
 
 const app = Fastify({
   logger: {
@@ -59,6 +60,11 @@ async function start() {
   await app.register(cors, {
     origin: process.env.STUDIO_ORIGIN || 'http://localhost:5173',
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  });
+
+  // Multipart form support (for audio file uploads)
+  await app.register(multipart, {
+    limits: { fileSize: 50 * 1024 * 1024, files: 1 },
   });
 
   // Health check

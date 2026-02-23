@@ -437,6 +437,46 @@ if [[ -n "$ADMIN_IPS" ]]; then
 fi
 
 # =============================================================================
+# ── STEP 9: Grant IVR Studio API write-access to recordings directory ─────────
+# =============================================================================
+#
+# When the API server runs on a workstation (dev mode), it uploads audio files
+# to the FusionPBX server via SFTP as the SSH admin user.  That user must be
+# able to write to /var/lib/freeswitch/storage/recordings/.
+# We achieve this by:
+#   a) adding the admin user to the freeswitch group, and
+#   b) making the recordings directory group-writable with the setgid bit so
+#      newly-created sub-directories inherit the freeswitch group.
+# =============================================================================
+
+step "Step 9/9 — Configure recordings directory write access for API"
+
+# Determine the SSH admin username (falls back to the user who ran the script
+# or $SUDO_USER if invoked via sudo).
+IVR_ADMIN_USER="${IVR_ADMIN_USER:-${SUDO_USER:-${USER:-}}}"
+
+RECORDINGS_BASE="${FS_RECORDINGS_PATH:-/var/lib/freeswitch/storage/recordings}"
+mkdir -p "$RECORDINGS_BASE"
+
+# Make the directory group-writable and set the setgid bit so sub-directories
+# inherit the freeswitch group automatically.
+chown freeswitch:freeswitch "$RECORDINGS_BASE" 2>/dev/null || true
+chmod g+ws "$RECORDINGS_BASE" 2>/dev/null || true
+ok "Recordings directory configured: $RECORDINGS_BASE (group-writable)"
+
+# Add the admin user to the freeswitch group if specified.
+if [[ -n "$IVR_ADMIN_USER" ]] && id "$IVR_ADMIN_USER" &>/dev/null 2>&1; then
+  usermod -aG freeswitch "$IVR_ADMIN_USER" 2>/dev/null || true
+  ok "Added $IVR_ADMIN_USER to the freeswitch group"
+  warn "Log out and back in as $IVR_ADMIN_USER (or reconnect SSH) for the group change to take effect"
+else
+  warn "Could not determine SSH admin user — set IVR_ADMIN_USER=<username> and re-run this script,"
+  warn "or run manually on the server:"
+  warn "  sudo usermod -aG freeswitch <YOUR_SSH_USER>"
+  warn "  sudo chmod g+ws /var/lib/freeswitch/storage/recordings"
+fi
+
+# =============================================================================
 # ── FINAL: Reload FreeSWITCH XML ─────────────────────────────────────────────
 # =============================================================================
 

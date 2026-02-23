@@ -24,8 +24,11 @@ import {
 import { useFlowStore } from '../store/flowStore';
 import { nodeTypes } from './nodes';
 import { NodeConfigPanel } from './panels/NodeConfigPanel';
+import { AddableEdge } from './edges/AddableEdge';
 import { generateNodeId } from '../lib/utils';
 import { cn } from '../lib/utils';
+
+const edgeTypes = { default: AddableEdge };
 
 // ─── Node palette ─────────────────────────────────────────────────────────────
 const NODE_PALETTE = [
@@ -416,6 +419,7 @@ export function FlowEditor() {
             onDrop={onDrop}
             onInit={(instance) => { rfInstance.current = instance; }}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             edgesUpdatable
             onEdgeUpdateStart={onEdgeUpdateStart}
             onEdgeUpdate={onEdgeUpdate}

@@ -170,6 +170,343 @@ const BUILTIN_SOUNDS: SoundCategory[] = [
   },
 ];
 
+// ── Operator select options (reused in simple and multi-branch modes) ─────────
+// ── Operators ─────────────────────────────────────────────────────────────────
+const OPERATORS = [
+  { value: 'eq',          label: '== equals'          , short: '=='  },
+  { value: 'neq',         label: '!= not equals'      , short: '!='  },
+  { value: 'gt',          label: '>  greater than'    , short: '>'   },
+  { value: 'lt',          label: '<  less than'        , short: '<'   },
+  { value: 'gte',         label: '>= greater or equal', short: '>='  },
+  { value: 'lte',         label: '<= less or equal'   , short: '<='  },
+  { value: 'contains',    label: '∋  contains'        , short: '∋'   },
+  { value: 'not_contains',label: '∌  not contains'    , short: '∌'   },
+  { value: 'empty',       label: '∅  is empty'        , short: '∅'   },
+  { value: 'not_empty',   label: '≠∅ is not empty'    , short: '≠∅'  },
+];
+const NO_VALUE_OPS = new Set(['empty', 'not_empty']);
+
+// ── Branch / clause data types ─────────────────────────────────────────────────
+interface ConditionClause {
+  id:       string;
+  variable: string;
+  operator: string;
+  value:    string;
+  join?:    'and' | 'or'; // join with the PREVIOUS clause (undefined for first)
+}
+
+interface ConditionBranch {
+  id:      string;
+  label:   string;
+  clauses: ConditionClause[];
+  // legacy flat fields (before clauses were added) — kept for backward compat
+  operator?: string;
+  value?:    string;
+}
+
+// Convert a legacy branch (operator/value at branch level) to the new clauses format
+function normalizeBranch(b: ConditionBranch, fallbackVariable: string): ConditionBranch {
+  if (b.clauses && b.clauses.length > 0) return b;
+  return {
+    ...b,
+    clauses: [{
+      id:       `c_${b.id}`,
+      variable: fallbackVariable,
+      operator: b.operator || 'eq',
+      value:    b.value    || '',
+    }],
+  };
+}
+
+// ── Single-branch clause editor (reused for each branch) ─────────────────────
+function BranchEditor({
+  branch,
+  idx,
+  onUpdate,
+  onRemove,
+}: {
+  branch:   ConditionBranch;
+  idx:      number;
+  onUpdate: (b: ConditionBranch) => void;
+  onRemove: () => void;
+}) {
+  const setClauses = (cls: ConditionClause[]) => onUpdate({ ...branch, clauses: cls });
+
+  const addClause = (join: 'and' | 'or') =>
+    setClauses([...branch.clauses, { id: `c${Date.now()}`, variable: '', operator: 'eq', value: '', join }]);
+
+  const removeClause = (id: string) => {
+    if (branch.clauses.length <= 1) return;
+    setClauses(branch.clauses.filter((c) => c.id !== id));
+  };
+
+  const updateClause = (id: string, key: string, val: string) =>
+    setClauses(branch.clauses.map((c) => (c.id === id ? { ...c, [key]: val } : c)));
+
+  const toggleJoin = (id: string) =>
+    setClauses(branch.clauses.map((c) =>
+      c.id === id ? { ...c, join: c.join === 'or' ? 'and' : 'or' } : c
+    ));
+
+  return (
+    <div className="rounded-lg border border-orange-100 bg-orange-50/30 p-2 space-y-1.5">
+      {/* Branch header: If / Else-If badge + delete */}
+      <div className="flex items-center justify-between">
+        <span className={cn(
+          'text-[10px] font-bold px-1.5 py-0.5 rounded',
+          idx === 0 ? 'bg-orange-500 text-white' : 'bg-amber-100 text-amber-700'
+        )}>
+          {idx === 0 ? 'If' : `Else If ${idx}`}
+        </span>
+        <button onClick={onRemove} title="Remove branch" className="text-gray-300 hover:text-red-400 transition-colors">
+          <Trash2 size={12} />
+        </button>
+      </div>
+
+      {/* Clause list */}
+      {branch.clauses.map((clause, ci) => (
+        <div key={clause.id}>
+          {/* AND / OR join toggle (between clauses) */}
+          {ci > 0 && (
+            <div className="flex items-center gap-1.5 my-1">
+              <button
+                onClick={() => toggleJoin(clause.id)}
+                title="Click to toggle AND / OR"
+                className={cn(
+                  'text-[10px] font-bold px-2 py-0.5 rounded border transition-colors cursor-pointer',
+                  clause.join === 'or'
+                    ? 'bg-purple-100 text-purple-700 border-purple-300 hover:bg-purple-200'
+                    : 'bg-blue-100   text-blue-700   border-blue-300   hover:bg-blue-200'
+                )}
+              >
+                {(clause.join || 'and').toUpperCase()}
+              </button>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
+          )}
+
+          {/* variable + op + value row */}
+          <div className="flex items-center gap-1">
+            <input
+              value={clause.variable}
+              onChange={(e) => updateClause(clause.id, 'variable', e.target.value)}
+              placeholder="variable"
+              title="Variable name (e.g. account_tier)"
+              className="border border-gray-200 rounded px-1.5 py-1 text-[11px] font-mono min-w-0 flex-[2] bg-white"
+            />
+            <select
+              value={clause.operator}
+              onChange={(e) => updateClause(clause.id, 'operator', e.target.value)}
+              className="border border-gray-200 rounded px-0.5 py-1 text-[11px] w-12 bg-white shrink-0"
+            >
+              {OPERATORS.map((op) => (
+                <option key={op.value} value={op.value}>{op.short}</option>
+              ))}
+            </select>
+            {!NO_VALUE_OPS.has(clause.operator) && (
+              <input
+                value={clause.value}
+                onChange={(e) => updateClause(clause.id, 'value', e.target.value)}
+                placeholder="value"
+                className="border border-gray-200 rounded px-1.5 py-1 text-[11px] font-mono min-w-0 flex-[2] bg-white"
+              />
+            )}
+            {branch.clauses.length > 1 && (
+              <button onClick={() => removeClause(clause.id)} className="text-gray-200 hover:text-red-400 transition-colors shrink-0">
+                <X size={10} />
+              </button>
+            )}
+          </div>
+        </div>
+      ))}
+
+      {/* Add AND / OR clause */}
+      <div className="flex gap-1 pt-0.5">
+        <button
+          onClick={() => addClause('and')}
+          className="text-[10px] text-blue-600 border border-blue-200 rounded px-2 py-0.5 hover:bg-blue-50 transition-colors flex items-center gap-0.5"
+        >
+          <Plus size={9} /> AND
+        </button>
+        <button
+          onClick={() => addClause('or')}
+          className="text-[10px] text-purple-600 border border-purple-200 rounded px-2 py-0.5 hover:bg-purple-50 transition-colors flex items-center gap-0.5"
+        >
+          <Plus size={9} /> OR
+        </button>
+      </div>
+
+      {/* Output handle label */}
+      <div className="flex items-center gap-1.5 pt-1.5 border-t border-orange-100">
+        <span className="text-[10px] text-gray-400 shrink-0">→ handle</span>
+        <input
+          value={branch.label}
+          onChange={(e) => onUpdate({ ...branch, label: e.target.value })}
+          placeholder="Output label (e.g. VIP Active)"
+          className="border border-gray-200 rounded px-1.5 py-1 text-[11px] flex-1 bg-white"
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Condition node editor — supports simple if/else and multi if/elseif/else ──
+function ConditionEditor({
+  data,
+  set,
+}: {
+  data: Record<string, unknown>;
+  set:  (k: string, v: unknown) => void;
+}) {
+  const rawBranches = (data.branches as ConditionBranch[]) || [];
+  // Normalize: convert any legacy flat branches to new clauses format
+  const branches = rawBranches.map((b) => normalizeBranch(b, String(data.variable || '')));
+  const isMulti   = branches.length > 0;
+
+  const setBranches = (next: ConditionBranch[]) => set('branches', next);
+
+  const addBranch = () =>
+    setBranches([
+      ...branches,
+      {
+        id:      `b${Date.now()}`,
+        label:   '',
+        clauses: [{ id: `c${Date.now()}`, variable: String(data.variable || ''), operator: 'eq', value: '' }],
+      },
+    ]);
+
+  const updateBranch = (b: ConditionBranch) =>
+    setBranches(branches.map((x) => (x.id === b.id ? b : x)));
+
+  const removeBranch = (id: string) =>
+    setBranches(branches.filter((b) => b.id !== id));
+
+  const switchToMulti = () =>
+    setBranches([{
+      id:      `b${Date.now()}`,
+      label:   String(data.value || 'Branch 1'),
+      clauses: [{
+        id:       `c${Date.now()}`,
+        variable: String(data.variable || ''),
+        operator: String(data.operator  || 'eq'),
+        value:    String(data.value     || ''),
+      }],
+    }]);
+
+  const switchToSimple = () => setBranches([]);
+
+  return (
+    <>
+      {/* Label */}
+      <div className="flex flex-col gap-1">
+        <label className="text-xs font-medium text-gray-500">Label</label>
+        <input
+          value={String(data.label || '')}
+          onChange={(e) => set('label', e.target.value)}
+          placeholder="Condition"
+          className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+        />
+      </div>
+
+      {/* Mode toggle */}
+      <div className="flex rounded-lg overflow-hidden border border-gray-200 text-xs font-medium">
+        <button
+          onClick={switchToSimple}
+          className={cn(
+            'flex-1 py-1.5 transition-colors',
+            !isMulti ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          )}
+        >
+          If / Else
+        </button>
+        <button
+          onClick={switchToMulti}
+          className={cn(
+            'flex-1 py-1.5 transition-colors',
+            isMulti ? 'bg-orange-500 text-white' : 'bg-white text-gray-500 hover:bg-gray-50'
+          )}
+        >
+          Multi-Branch
+        </button>
+      </div>
+
+      {!isMulti ? (
+        /* ── Simple if / else (single variable, single condition) ── */
+        <>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-500">Variable</label>
+            <input
+              value={String(data.variable || '')}
+              onChange={(e) => set('variable', e.target.value)}
+              placeholder="e.g. account_type"
+              className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm font-mono"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label className="text-xs font-medium text-gray-500">Operator</label>
+            <select
+              value={String(data.operator || 'eq')}
+              onChange={(e) => set('operator', e.target.value)}
+              className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
+            >
+              {OPERATORS.map((op) => (
+                <option key={op.value} value={op.value}>{op.label}</option>
+              ))}
+            </select>
+          </div>
+          {!NO_VALUE_OPS.has(String(data.operator || 'eq')) && (
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-medium text-gray-500">Value</label>
+              <input
+                value={String(data.value || '')}
+                onChange={(e) => set('value', e.target.value)}
+                placeholder="e.g. premium"
+                className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm font-mono"
+              />
+            </div>
+          )}
+          <p className="text-[10px] text-gray-400 bg-gray-50 rounded px-2 py-1">
+            Outputs: <span className="font-semibold text-green-600">true</span> / <span className="font-semibold text-red-500">false</span>
+          </p>
+        </>
+      ) : (
+        /* ── Multi-branch: each branch has AND/OR clauses ── */
+        <div className="space-y-2">
+          <p className="text-[10px] text-gray-400 leading-relaxed">
+            Each branch can check <span className="font-semibold text-blue-600">multiple variables</span> joined by{' '}
+            <span className="font-semibold text-blue-600">AND</span> /{' '}
+            <span className="font-semibold text-purple-600">OR</span>.
+            Click the AND/OR badge to toggle.
+          </p>
+
+          {branches.map((branch, idx) => (
+            <BranchEditor
+              key={branch.id}
+              branch={branch}
+              idx={idx}
+              onUpdate={updateBranch}
+              onRemove={() => removeBranch(branch.id)}
+            />
+          ))}
+
+          {/* Else (always present) */}
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 flex items-center gap-2">
+            <span className="text-[10px] font-bold text-gray-500 bg-gray-200 px-1.5 py-0.5 rounded">Else</span>
+            <span className="text-[10px] text-gray-400">default — fires when no branch matches</span>
+          </div>
+
+          <button
+            onClick={addBranch}
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-orange-600 border border-dashed border-orange-300 rounded-md py-1.5 hover:bg-orange-50 transition-colors"
+          >
+            <Plus size={12} /> Add Else-If Branch
+          </button>
+        </div>
+      )}
+    </>
+  );
+}
+
 export function NodeConfigPanel() {
   const { nodes, selectedNodeId, setSelectedNodeId, updateNodeData, selectedDomain } = useFlowStore();
   const node = nodes.find((n) => n.id === selectedNodeId);
@@ -312,29 +649,7 @@ function NodeConfigForm({
       </>;
 
     case 'condition':
-      return <>
-        {field('Label', 'label', 'text', 'Condition')}
-        {field('Variable', 'variable', 'text', 'e.g. customer_tier')}
-        <Field label="Operator">
-          <select
-            value={String(data.operator || 'eq')}
-            onChange={(e) => set('operator', e.target.value)}
-            className="w-full border border-gray-200 rounded-md px-2 py-1.5 text-sm"
-          >
-            <option value="eq">== (equals)</option>
-            <option value="neq">!= (not equals)</option>
-            <option value="gt">&gt; (greater than)</option>
-            <option value="lt">&lt; (less than)</option>
-            <option value="gte">&gt;= (greater or equal)</option>
-            <option value="lte">&lt;= (less or equal)</option>
-            <option value="contains">contains</option>
-            <option value="not_contains">does not contain</option>
-            <option value="empty">is empty</option>
-            <option value="not_empty">is not empty</option>
-          </select>
-        </Field>
-        {field('Value', 'value', 'text', 'e.g. premium')}
-      </>;
+      return <ConditionEditor data={data} set={set} />;
 
     case 'time_condition':
       return <>

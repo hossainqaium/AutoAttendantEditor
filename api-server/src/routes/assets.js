@@ -1,8 +1,230 @@
 'use strict';
 
-const pool = require('../db');
+const pool       = require('../db');
+const path       = require('path');
+const fsP        = require('fs').promises;
+const crypto     = require('crypto');
+const SftpClient = require('ssh2-sftp-client');
+const { Client: SshClient } = require('ssh2');
+
+// Base directory for FusionPBX recordings — configurable via env
+const FS_RECORDINGS_BASE = process.env.FS_RECORDINGS_PATH ||
+  '/var/lib/freeswitch/storage/recordings';
+
+// Parse "user@host" from FUSIONPBX_SSH env var
+function parseSshTarget() {
+  const raw = process.env.FUSIONPBX_SSH || '';
+  const at  = raw.lastIndexOf('@');
+  if (at === -1) return null;
+  return {
+    host:     raw.slice(at + 1),
+    username: raw.slice(0, at),
+    password: process.env.FUSIONPBX_SSH_PASSWORD || '',
+    port:     parseInt(process.env.FUSIONPBX_SSH_PORT || '22'),
+  };
+}
+
+// Execute a shell command on the remote server via SSH.
+// Always consumes stdout + stderr to prevent pipe-buffer deadlocks.
+// Hard-kills the connection after timeoutMs to prevent UI hangs.
+function sshExec(cfg, cmd, timeoutMs = 12000) {
+  return new Promise((resolve, reject) => {
+    const conn = new SshClient();
+    let timer;
+    let settled = false;
+
+    const finish = (code, stderr) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.end();
+      resolve({ code, stderr: stderr.trim() });
+    };
+    const fail = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.end();
+      reject(err);
+    };
+
+    conn.on('ready', () => {
+      conn.exec(cmd, (err, stream) => {
+        if (err) return fail(err);
+
+        let stderr = '';
+        stream.on('data', () => {});                          // drain stdout
+        stream.stderr.on('data', (d) => { stderr += d; });
+        stream.on('close', (code) => finish(code ?? 1, stderr));
+        stream.on('error', fail);
+
+        timer = setTimeout(() => fail(new Error(`SSH command timed out after ${timeoutMs / 1000}s`)), timeoutMs);
+      });
+    });
+    conn.on('error', fail);
+    conn.connect({ host: cfg.host, port: cfg.port, username: cfg.username, password: cfg.password, readyTimeout: 8000 });
+  });
+}
+
+// Upload fileBuffer to the FusionPBX server when the API runs outside that server.
+//
+// Strategy:
+//   1. Write to /tmp via SFTP  — qaium always has write access here.
+//   2. SSH exec: sudo mv the file to the real recordings path and fix ownership.
+//      This works when qaium has sudo; after running server-setup.sh it also works
+//      without sudo because the recordings dir becomes group-writable (freeswitch group).
+async function sftpUpload(fileBuffer, remotePath, log) {
+  const cfg = parseSshTarget();
+  if (!cfg || !cfg.password) throw new Error('FUSIONPBX_SSH / FUSIONPBX_SSH_PASSWORD not configured');
+
+  const remoteDir = path.posix.dirname(remotePath);
+  const tmpPath   = `/tmp/ivr_${crypto.randomUUID()}.wav`;
+
+  // ── Step 1: write to /tmp ─────────────────────────────────────────────────
+  log.info({ tmpPath }, 'staging file in /tmp via SFTP');
+  const sftp = new SftpClient();
+  try {
+    await sftp.connect({ host: cfg.host, port: cfg.port, username: cfg.username, password: cfg.password, readyTimeout: 10000 });
+    await sftp.put(fileBuffer, tmpPath);
+    log.info({ tmpPath, bytes: fileBuffer.length }, 'staged in /tmp');
+  } finally {
+    await sftp.end().catch(() => {});
+  }
+
+  // ── Step 2: try direct SFTP mkdir + move (works if dir is group-writable) ─
+  const sftp2 = new SftpClient();
+  try {
+    await sftp2.connect({ host: cfg.host, port: cfg.port, username: cfg.username, password: cfg.password, readyTimeout: 10000 });
+    await sftp2.mkdir(remoteDir, true);
+    await sftp2.rename(tmpPath, remotePath);
+    log.info({ remotePath }, 'file saved via SFTP rename');
+    return; // success — no sudo needed
+  } catch {
+    // directory not writable by qaium — fall through to sudo approach
+    log.warn({ remoteDir }, 'direct SFTP write not permitted — trying sudo mv');
+  } finally {
+    await sftp2.end().catch(() => {});
+  }
+
+  // ── Step 3: try sudo mv (works when qaium has sudo on the server) ──────────
+  // First test passwordless sudo (exits immediately, no hang).
+  const noPassTest = await sshExec(cfg, 'sudo -n true', 5000).catch(() => ({ code: 1, stderr: '' }));
+  const useSudo    = noPassTest.code === 0;
+
+  if (!useSudo) {
+    // Clean up staged file so it doesn't litter /tmp
+    await sshExec(cfg, `rm -f '${tmpPath}'`, 5000).catch(() => {});
+
+    throw new Error(
+      'The FusionPBX server needs a one-time permission fix. ' +
+      'SSH in and run:\n' +
+      '  sudo usermod -aG freeswitch qaium\n' +
+      '  sudo chmod g+ws /var/lib/freeswitch/storage/recordings\n' +
+      'Then reconnect your SSH session and try again.'
+    );
+  }
+
+  // Passwordless sudo is available — use it directly (no password pipe needed)
+  const sudoMkdir = `sudo mkdir -p '${remoteDir}'`;
+  const sudoMv    = `sudo mv '${tmpPath}' '${remotePath}'`;
+  const sudoChown = `sudo chown freeswitch:freeswitch '${remotePath}' && sudo chmod 644 '${remotePath}'`;
+
+  for (const [label, cmd] of [['mkdir', sudoMkdir], ['mv', sudoMv], ['chown', sudoChown]]) {
+    const { code, stderr } = await sshExec(cfg, cmd);
+    if (code !== 0) {
+      await sshExec(cfg, `rm -f '${tmpPath}'`, 5000).catch(() => {});
+      throw new Error(`SSH sudo ${label} failed (exit ${code}): ${stderr}`);
+    }
+  }
+  log.info({ remotePath }, 'file saved via sudo mv');
+}
 
 module.exports = async function assetsRoutes(fastify) {
+
+  // ── POST /api/assets/recordings/upload ─────────────────────────────────────
+  // Accepts multipart/form-data with:
+  //   domainUuid    — string
+  //   recordingName — string (human display name, optional)
+  //   file          — audio file (ideally .wav)
+  fastify.post('/assets/recordings/upload', async (req, reply) => {
+    const parts = req.parts();
+
+    let domainUuid    = '';
+    let recordingName = '';
+    let fileBuffer    = null;
+    let fileName      = '';
+
+    for await (const part of parts) {
+      if (part.type === 'field') {
+        if (part.fieldname === 'domainUuid')    domainUuid    = String(part.value);
+        if (part.fieldname === 'recordingName') recordingName = String(part.value);
+      } else if (part.type === 'file') {
+        fileName   = part.filename || `recording_${Date.now()}.wav`;
+        fileBuffer = await part.toBuffer();
+      }
+    }
+
+    fastify.log.info({ domainUuid, recordingName, fileName, bytes: fileBuffer?.length ?? 0 }, 'upload received');
+
+    if (!domainUuid) return reply.code(400).send({ error: 'domainUuid required' });
+    if (!fileBuffer || fileBuffer.length === 0) return reply.code(400).send({ error: 'No file received — empty buffer' });
+
+    // Sanitise filename
+    fileName = path.basename(fileName).replace(/[^a-zA-Z0-9._-]/g, '_');
+    if (!fileName.match(/\.(wav|mp3|ogg|flac)$/i)) fileName += '.wav';
+
+    // Look up domain name for the directory path
+    let domainName = domainUuid; // fallback
+    try {
+      const dr = await pool.query(
+        'SELECT domain_name FROM v_domains WHERE domain_uuid = $1 LIMIT 1',
+        [domainUuid]
+      );
+      if (dr.rows.length > 0) domainName = dr.rows[0].domain_name;
+    } catch { /* continue with uuid as fallback */ }
+
+    // FusionPBX expects recordings at: {recordings_base}/{domain_name}/{filename}
+    // (no 'archive' subdirectory — that is for call recordings, not custom recordings)
+    const saveDir    = path.join(FS_RECORDINGS_BASE, domainName);
+    const remotePath = path.posix.join(FS_RECORDINGS_BASE, domainName, fileName);
+    let   fileSaved  = false;
+
+    try {
+      await fsP.mkdir(saveDir, { recursive: true });
+      await fsP.writeFile(path.join(saveDir, fileName), fileBuffer);
+      fileSaved = true;
+      fastify.log.info({ saveDir, fileName }, 'file saved locally');
+    } catch (localErr) {
+      fastify.log.warn({ err: localErr, saveDir }, 'local write failed — trying SFTP');
+      try {
+        await sftpUpload(fileBuffer, remotePath, fastify.log);
+        fileSaved = true;
+      } catch (sftpErr) {
+        fastify.log.error({ err: sftpErr }, 'SFTP upload failed');
+        return reply.code(500).send({ error: sftpErr.message });
+      }
+    }
+
+    if (!fileSaved) {
+      return reply.code(500).send({ error: 'Could not save audio file to server.' });
+    }
+
+    // Insert record into v_recordings
+    const recordingUuid = crypto.randomUUID();
+    const displayName   = (recordingName || fileName).replace(/\.[^.]+$/, '');
+    await pool.query(
+      `INSERT INTO v_recordings
+         (recording_uuid, domain_uuid, recording_filename, recording_name, recording_description)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (recording_uuid) DO NOTHING`,
+      [recordingUuid, domainUuid, fileName, displayName, 'Uploaded via IVR Studio']
+    ).catch((err) => {
+      // If DB insert fails just log and return the filename anyway
+      fastify.log.warn({ err }, 'DB insert for recording failed');
+    });
+
+    return { success: true, recording_uuid: recordingUuid, filename: fileName, name: displayName };
+  });
 
   // ── GET /api/assets/recordings ──────────────────────────────────────────────
   // Returns all custom recordings for a domain from FusionPBX v_recordings
