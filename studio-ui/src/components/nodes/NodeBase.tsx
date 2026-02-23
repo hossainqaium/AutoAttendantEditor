@@ -1,12 +1,14 @@
 // Shared node shell — all custom nodes wrap this
-import React from 'react';
+import React, { useCallback } from 'react';
 import { Handle, Position } from 'reactflow';
 import { cn } from '../../lib/utils';
+import { useFlowStore } from '../../store/flowStore';
 
 export interface NodeBaseProps {
+  nodeId: string;           // ReactFlow node id — needed for handle hover tracking
   label: string;
   icon: React.ReactNode;
-  color: string;        // Tailwind bg class, e.g. "bg-blue-500"
+  color: string;            // Tailwind bg class, e.g. "bg-blue-500"
   selected: boolean;
   children?: React.ReactNode;
   handles?: {
@@ -15,8 +17,22 @@ export interface NodeBaseProps {
   };
 }
 
-export function NodeBase({ label, icon, color, selected, children, handles }: NodeBaseProps) {
+export function NodeBase({ nodeId, label, icon, color, selected, children, handles }: NodeBaseProps) {
+  const setHoveredHandle = useFlowStore((s) => s.setHoveredHandle);
   const outputs = handles?.outputs || [{ id: 'next', label: 'next' }];
+
+  // Stable hover callbacks
+  const onSourceEnter = useCallback((handleId: string) => () => {
+    setHoveredHandle({ nodeId, handleId, handleType: 'source' });
+  }, [nodeId, setHoveredHandle]);
+
+  const onTargetEnter = useCallback(() => {
+    setHoveredHandle({ nodeId, handleId: null, handleType: 'target' });
+  }, [nodeId, setHoveredHandle]);
+
+  const onLeave = useCallback(() => {
+    setHoveredHandle(null);
+  }, [setHoveredHandle]);
 
   return (
     <div
@@ -36,7 +52,7 @@ export function NodeBase({ label, icon, color, selected, children, handles }: No
         <div className="px-3 py-2 text-xs text-gray-600 space-y-1">{children}</div>
       )}
 
-      {/* Output handles — colours driven by CSS (.react-flow__handle-source / -connected) */}
+      {/* Output handles (right side — violet by default via CSS) */}
       {outputs.map((out, idx) => {
         const top = outputs.length === 1
           ? '50%'
@@ -49,14 +65,18 @@ export function NodeBase({ label, icon, color, selected, children, handles }: No
             id={out.id}
             style={{ top }}
             title={out.label}
+            onMouseEnter={onSourceEnter(out.id)}
+            onMouseLeave={onLeave}
           />
         );
       })}
 
-      {/* Single input handle — colour driven by CSS (.react-flow__handle-target / -connected) */}
+      {/* Input handle (left side — sky blue by default via CSS) */}
       <Handle
         type="target"
         position={Position.Left}
+        onMouseEnter={onTargetEnter}
+        onMouseLeave={onLeave}
       />
     </div>
   );

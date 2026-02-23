@@ -54,6 +54,7 @@ const DEFAULT_NODE_DATA: Record<string, Record<string, unknown>> = {
 
 const EDGE_DEFAULT  = { stroke: '#6366f1', strokeWidth: 2 };
 const EDGE_SELECTED = { stroke: '#f59e0b', strokeWidth: 3 };
+const EDGE_HOVERED  = { stroke: '#f97316', strokeWidth: 3 };   // orange-500 — handle hover
 
 // ─── Confirmation dialog ──────────────────────────────────────────────────────
 interface ConfirmState {
@@ -112,6 +113,7 @@ export function FlowEditor() {
     isDirty,
     pushHistory, undo, redo,
     history, future,
+    hoveredHandle,
   } = useFlowStore();
 
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
@@ -284,10 +286,38 @@ export function FlowEditor() {
   }, [nodes, edges, selectedNodeId, undo, redo, requestDelete]);
 
   // ── Styled edges ────────────────────────────────────────────────────────
-  const styledEdges = edges.map(edge => ({
-    ...edge,
-    style: edge.selected ? EDGE_SELECTED : EDGE_DEFAULT,
-  }));
+  // Priority: selected > handle-hovered > default
+  const styledEdges = edges.map((edge) => {
+    let style   = EDGE_DEFAULT;
+    let animated = false;
+
+    if (edge.selected) {
+      style = EDGE_SELECTED;
+    } else if (hoveredHandle) {
+      // Is this edge connected to the currently-hovered handle?
+      //
+      // For SOURCE handles we match when:
+      //   • edge.source is the hovered node, AND
+      //   • edge.sourceHandle exactly equals the hovered handle id
+      //     — OR edge.sourceHandle is null/undefined/'' (legacy/template edges
+      //       that were saved without an explicit sourceHandle; treat them as
+      //       belonging to the default/only output of that node)
+      const connected =
+        hoveredHandle.handleType === 'source'
+          ? edge.source === hoveredHandle.nodeId &&
+            (edge.sourceHandle === hoveredHandle.handleId ||
+             edge.sourceHandle == null ||
+             edge.sourceHandle === '')
+          : edge.target === hoveredHandle.nodeId;
+
+      if (connected) {
+        style    = EDGE_HOVERED;
+        animated = true;
+      }
+    }
+
+    return { ...edge, style, animated };
+  });
 
   const canUndo = history.length > 0;
   const canRedo = future.length  > 0;

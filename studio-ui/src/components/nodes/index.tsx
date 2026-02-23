@@ -17,7 +17,7 @@ type NodeProps = { id: string; data: Record<string, unknown>; selected: boolean 
 // ---------------------------------------------------------------------------
 export function PlayAudioNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeBase label={String(data.label || 'Play Audio')} icon={<Volume2 size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Play Audio')} icon={<Volume2 size={13}/>}
       color="bg-emerald-500" selected={selected}>
       <p className="truncate">{String(data.file || data.file_var || 'No file set')}</p>
     </NodeBase>
@@ -28,7 +28,6 @@ export function PlayAudioNode({ id, data, selected }: NodeProps) {
 // Get Digits
 // ---------------------------------------------------------------------------
 export function GetDigitsNode({ id, data, selected }: NodeProps) {
-  const digits = ['1','2','3','4','5','6','7','8','9','0','*','#'];
   const activeDigits = (data.valid_digits as string[] | undefined) || ['1','2'];
   const outputs = [
     ...activeDigits.map((d) => ({ id: d, label: `Press ${d}` })),
@@ -36,7 +35,7 @@ export function GetDigitsNode({ id, data, selected }: NodeProps) {
     { id: 'invalid', label: 'Invalid' },
   ];
   return (
-    <NodeBase label={String(data.label || 'Get Digits')} icon={<Hash size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Get Digits')} icon={<Hash size={13}/>}
       color="bg-violet-500" selected={selected} handles={{ outputs }}>
       <p>Max: {String(data.max_digits || 1)} digit(s)</p>
       <p>Timeout: {String(data.timeout_ms || 5000)}ms</p>
@@ -49,7 +48,7 @@ export function GetDigitsNode({ id, data, selected }: NodeProps) {
 // ---------------------------------------------------------------------------
 export function TransferNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeBase label={String(data.label || 'Transfer')} icon={<PhoneForwarded size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Transfer')} icon={<PhoneForwarded size={13}/>}
       color="bg-sky-500" selected={selected}
       handles={{ outputs: [{ id: 'failed', label: 'Failed' }] }}>
       <p className="truncate">{String(data.destination || 'No destination')}</p>
@@ -63,7 +62,7 @@ export function TransferNode({ id, data, selected }: NodeProps) {
 // ---------------------------------------------------------------------------
 export function VoicemailNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeBase label={String(data.label || 'Voicemail')} icon={<Voicemail size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Voicemail')} icon={<Voicemail size={13}/>}
       color="bg-amber-500" selected={selected} handles={{ outputs: [] }}>
       <p>Mailbox: {String(data.mailbox_id || '{{dnis}}')}</p>
     </NodeBase>
@@ -75,7 +74,7 @@ export function VoicemailNode({ id, data, selected }: NodeProps) {
 // ---------------------------------------------------------------------------
 export function ConditionNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeBase label={String(data.label || 'Condition')} icon={<GitBranch size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Condition')} icon={<GitBranch size={13}/>}
       color="bg-orange-500" selected={selected}
       handles={{ outputs: [{ id: 'true', label: 'True' }, { id: 'false', label: 'False' }] }}>
       <p className="truncate font-mono text-[10px]">
@@ -91,7 +90,7 @@ export function ConditionNode({ id, data, selected }: NodeProps) {
 export function TimeConditionNode({ id, data, selected }: NodeProps) {
   const sched = (data.schedule as { open?: string; close?: string } | undefined) || {};
   return (
-    <NodeBase label={String(data.label || 'Time Condition')} icon={<Clock size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Time Condition')} icon={<Clock size={13}/>}
       color="bg-teal-500" selected={selected}
       handles={{ outputs: [{ id: 'open', label: 'Open' }, { id: 'closed', label: 'Closed' }] }}>
       <p>{sched.open || '--:--'} – {sched.close || '--:--'}</p>
@@ -104,7 +103,7 @@ export function TimeConditionNode({ id, data, selected }: NodeProps) {
 // ---------------------------------------------------------------------------
 export function ApiCallNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeBase label={String(data.label || 'API Call')} icon={<Globe size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'API Call')} icon={<Globe size={13}/>}
       color="bg-indigo-500" selected={selected}
       handles={{ outputs: [
         { id: 'success', label: 'Success' },
@@ -122,7 +121,7 @@ export function ApiCallNode({ id, data, selected }: NodeProps) {
 // ---------------------------------------------------------------------------
 export function HangupNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeBase label={String(data.label || 'Hangup')} icon={<PhoneOff size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Hangup')} icon={<PhoneOff size={13}/>}
       color="bg-red-500" selected={selected} handles={{ outputs: [] }}>
       <p>{String(data.cause || 'NORMAL_CLEARING')}</p>
     </NodeBase>
@@ -134,7 +133,7 @@ export function HangupNode({ id, data, selected }: NodeProps) {
 // ---------------------------------------------------------------------------
 export function SetVariableNode({ id, data, selected }: NodeProps) {
   return (
-    <NodeBase label={String(data.label || 'Set Variable')} icon={<Variable size={13}/>}
+    <NodeBase nodeId={id} label={String(data.label || 'Set Variable')} icon={<Variable size={13}/>}
       color="bg-gray-600" selected={selected}>
       <p className="font-mono text-[10px] truncate">
         {String(data.key || 'key')} = {String(data.value || '...')}

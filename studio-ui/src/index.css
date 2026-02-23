@@ -69,34 +69,59 @@
   fill: #f59e0b;
 }
 
-/* Handles – base (unconnected) */
+/* ── Handle dots ────────────────────────────────────── */
+
+/* Base — shared by all handles */
 .react-flow__handle {
-  width: 10px;
-  height: 10px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   border: 2px solid #fff;
-  background: #94a3b8;          /* slate-400 — unconnected */
-  transition: background 0.15s, box-shadow 0.15s;
+  transition: transform 0.15s ease,
+              background 0.15s ease,
+              box-shadow 0.15s ease;
 }
 
-/* Source / output handles (unconnected) */
-.react-flow__handle-source {
-  background: #818cf8;          /* indigo-400 */
-}
-
-/* Target / input handle (unconnected) */
+/* LEFT side — input / target  →  sky blue */
 .react-flow__handle-target {
-  background: #94a3b8;          /* slate-400 */
+  background: #38bdf8;   /* sky-400  */
 }
 
-/* Connected handles (any) */
+/* RIGHT side — output / source  →  violet */
+.react-flow__handle-source {
+  background: #a78bfa;   /* violet-400 */
+}
+
+/* Connected (any) → emerald */
 .react-flow__handle-connected {
   background: #10b981 !important;   /* emerald-500 */
-  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.22);
 }
 
-/* During an active drag – highlight valid targets */
+/* ── Hover: any handle ──────────────────────────────── */
+/* ReactFlow positions left/right handles with translate(0, -50%) for vertical
+   centering. We must preserve that in our hover transform, otherwise the dot
+   shifts position. Appending scale() after the base translate keeps the
+   centre perfectly fixed while the dot grows. */
+.react-flow__handle:hover,
+.react-flow__handle-connected:hover {
+  transform: translate(0, -50%) scale(1.25) !important;
+  background: #fb923c !important;   /* orange-400 — vivid hover */
+  box-shadow: 0 0 0 2px rgba(251, 146, 60, 0.28) !important;
+  border-color: #fff !important;
+  z-index: 10;
+}
+
+/* During an active drag – highlight valid drop targets */
 .react-flow__handle-valid {
   background: #34d399 !important;
   box-shadow: 0 0 0 4px rgba(52, 211, 153, 0.35);
+}
+
+/* ── Hovered-edge highlight (applied via JS inline style) ───
+   The .handle-hovered-edge class marks edges whose connected
+   handle is currently being hovered.                        */
+.react-flow__edge.handle-hovered-edge .react-flow__edge-path {
+  stroke: #f97316 !important;   /* orange-500 */
+  stroke-width: 3px !important;
 }

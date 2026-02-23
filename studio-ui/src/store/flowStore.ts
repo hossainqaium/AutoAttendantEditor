@@ -68,6 +68,10 @@ interface FlowStore {
 
   // Load a template graph onto the canvas
   loadTemplate: (nodes: Node[], edges: Edge[]) => void;
+
+  // Hovered handle — used to highlight connected edges
+  hoveredHandle: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' } | null;
+  setHoveredHandle: (h: { nodeId: string; handleId: string | null; handleType: 'source' | 'target' } | null) => void;
 }
 
 export const useFlowStore = create<FlowStore>((set, get) => ({
@@ -209,4 +213,7 @@ export const useFlowStore = create<FlowStore>((set, get) => ({
 
   loadTemplate: (nodes, edges) =>
     set({ nodes, edges, isDirty: true, selectedNodeId: null, validationErrors: [], history: [], future: [] }),
+
+  hoveredHandle: null,
+  setHoveredHandle: (hoveredHandle) => set({ hoveredHandle }),
 }));
