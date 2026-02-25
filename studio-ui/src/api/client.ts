@@ -2,17 +2,15 @@
 // IVR Studio API Client
 // =============================================================================
 
-const BASE = '/api';
-
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method || 'GET').toUpperCase();
-  // Only send Content-Type: application/json when there is actually a body
+  const url = `/api${path.startsWith('/') ? path : `/${path}`}`;
   const hasBody = init?.body !== undefined && init.body !== null;
   const headers: Record<string, string> = hasBody
     ? { 'Content-Type': 'application/json', ...(init?.headers as Record<string, string> || {}) }
     : { ...(init?.headers as Record<string, string> || {}) };
 
-  const res = await fetch(`${BASE}${path}`, { ...init, method, headers });
+  const res = await fetch(url, { ...init, method, headers });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `HTTP ${res.status}`);
@@ -62,6 +60,40 @@ export const getVersions = (flowId: string, domainUuid: string) =>
 export const getVersionFull = (flowId: string, versionId: string, domainUuid: string) =>
   request<IvrVersionFull>(`/flows/${flowId}/versions/${versionId}?domainUuid=${domainUuid}`);
 
+// ── Extensions ───────────────────────────────────────────────────
+export const getExtensions = (domainUuid: string) =>
+  request<Extension[]>(`/extensions?domainUuid=${domainUuid}`);
+
+export const createExtension = (body: {
+  domainUuid: string;
+  extension: string;
+  password: string;
+  effective_caller_id_name?: string;
+  effective_caller_id_number?: string;
+  description?: string;
+  enabled?: boolean;
+  user_context?: string;
+  voicemail_enabled?: boolean;
+}) => request<Extension>('/extensions', { method: 'POST', body: JSON.stringify(body) });
+
+export const updateExtension = (
+  extensionUuid: string,
+  body: {
+    domainUuid: string;
+    extension?: string;
+    password?: string;
+    effective_caller_id_name?: string;
+    effective_caller_id_number?: string;
+    description?: string;
+    enabled?: boolean;
+    user_context?: string;
+    voicemail_enabled?: boolean;
+  }
+) => request<Extension>(`/extensions/${extensionUuid}`, { method: 'PUT', body: JSON.stringify(body) });
+
+export const deleteExtension = (extensionUuid: string, domainUuid: string) =>
+  request<void>(`/extensions/${extensionUuid}?domainUuid=${domainUuid}`, { method: 'DELETE' });
+
 // ── DIDs ─────────────────────────────────────────────────────────
 export const getDids = (domainUuid: string) =>
   request<DidRoute[]>(`/dids?domainUuid=${domainUuid}`);
@@ -87,6 +119,18 @@ export const getCallLogs = (domainUuid: string, flowId?: string, limit = 50, off
   const qs = new URLSearchParams({ domainUuid, limit: String(limit), offset: String(offset) });
   if (flowId) qs.set('flowId', flowId);
   return request<CallLog[]>(`/call-logs?${qs}`);
+};
+
+// ── CDR (FusionPBX Call Detail Records) ──────────────────────────
+export const getCdr = (
+  domainUuid: string,
+  opts?: { startDateTime?: string; endDateTime?: string; extensions?: string[] }
+) => {
+  const qs = new URLSearchParams({ domainUuid });
+  if (opts?.startDateTime) qs.set('startDateTime', opts.startDateTime);
+  if (opts?.endDateTime) qs.set('endDateTime', opts.endDateTime);
+  if (opts?.extensions?.length) qs.set('extensions', opts.extensions.join(','));
+  return request<CdrRecord[]>(`/cdr?${qs}`);
 };
 
 // ── Assets (FusionPBX recordings & destinations) ──────────────────
@@ -138,6 +182,19 @@ export interface IvrVersionFull extends IvrVersion {
   raw_graph: ReactFlowGraph | null;
   execution_graph: unknown;
   published_by: string | null;
+}
+
+export interface Extension {
+  extension_uuid: string;
+  domain_uuid: string;
+  extension: string;
+  effective_caller_id_name: string;
+  effective_caller_id_number: string | null;
+  description: string | null;
+  enabled: boolean | string;
+  context: string | null;
+  domain_name: string | null;
+  voicemail_enabled?: boolean;
 }
 
 export interface DidRoute {
@@ -203,6 +260,33 @@ export interface CallLog {
   ended_at: string | null;
   disposition: string | null;
   duration_secs: number | null;
+}
+
+/** FusionPBX standard CDR row (v_xml_cdr) */
+export interface CdrRecord {
+  sip_call_id: string;
+  domain_uuid: string;
+  start_stamp: string;
+  answer_stamp: string | null;
+  end_stamp: string | null;
+  direction: string | null;
+  extension: string | null;
+  extension_name: string | null;
+  caller_id_name: string | null;
+  caller_id_number: string | null;
+  caller_destination: string | null;
+  destination_number: string | null;
+  context: string | null;
+  duration: number | null;
+  wait_sec: number | null;
+  hangup_cause: string | null;
+  status: string | null;
+  sip_hangup_disposition: string | null;
+  missed_call: boolean | null;
+  record_path: string | null;
+  record_name: string | null;
+  read_codec: string | null;
+  write_codec: string | null;
 }
 
 export interface ReactFlowGraph {

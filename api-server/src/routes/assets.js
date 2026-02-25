@@ -309,6 +309,98 @@ module.exports = async function assetsRoutes(fastify) {
     ];
   });
 
+  // ── GET /api/assets/sounds/stream ─────────────────────────────────────────
+  // Streams an audio file from the FusionPBX server to the browser.
+  // Query params:
+  //   path       — relative path, e.g. "ivr/ivr-welcome.wav" or "my_recording.wav"
+  //   domainUuid — (optional) required for custom recordings to locate the domain folder
+  //
+  // FreeSWITCH stores built-in sounds with a sample-rate subdir:
+  //   {sounds_base}/ivr/8000/ivr-welcome.wav   (8 kHz)
+  //   {sounds_base}/ivr/16000/ivr-welcome.wav  (16 kHz)
+  // The paths we display omit the rate subdir, so we try several candidates.
+  fastify.get('/assets/sounds/stream', async (req, reply) => {
+    const { path: filePath, domainUuid } = req.query;
+    if (!filePath) return reply.code(400).send({ error: 'path required' });
+
+    // Prevent directory traversal
+    const safe  = String(filePath).replace(/\.\./g, '').replace(/^\/+/, '');
+    const dir   = path.posix.dirname(safe);   // e.g. "ivr"
+    const fname = path.posix.basename(safe);  // e.g. "ivr-welcome.wav"
+
+    const FS_SOUNDS_BASE = process.env.FS_SOUNDS_BASE ||
+      '/usr/share/freeswitch/sounds/en/us/callie';
+
+    // ── Build ordered list of candidate paths to try ──────────────────────────
+    // Built-in sounds may be stored at the path directly or inside a rate subdir.
+    const RATES = ['8000', '16000', '32000', '48000'];
+    const candidates = [
+      path.posix.join(FS_SOUNDS_BASE, safe),                          // direct
+      ...RATES.map((r) => path.posix.join(FS_SOUNDS_BASE, dir, r, fname)), // with rate subdir
+    ];
+
+    // Custom recording: {recordings_base}/{domain_name}/{filename}
+    if (domainUuid) {
+      let domainName = domainUuid;
+      try {
+        const dr = await pool.query(
+          'SELECT domain_name FROM v_domains WHERE domain_uuid = $1 LIMIT 1',
+          [domainUuid]
+        );
+        if (dr.rows.length > 0) domainName = dr.rows[0].domain_name;
+      } catch { /* use uuid as fallback */ }
+      candidates.push(path.posix.join(FS_RECORDINGS_BASE, domainName, fname));
+    }
+
+    fastify.log.debug({ candidates }, 'stream: trying candidate paths');
+
+    // ── 1. Try local filesystem (API co-located with FusionPBX) ──────────────
+    for (const p of candidates) {
+      try {
+        const data = await fsP.readFile(p);
+        reply.header('Content-Type', 'audio/wav');
+        reply.header('Cache-Control', 'public, max-age=3600');
+        return reply.send(data);
+      } catch { /* not found locally, continue */ }
+    }
+
+    // ── 2. Try SFTP (API running remotely, FusionPBX is the SSH target) ──────
+    const cfg = parseSshTarget();
+    if (!cfg || !cfg.password) {
+      fastify.log.warn('stream: file not found locally and SFTP not configured');
+      return reply.code(404).send({ error: 'Audio file not found' });
+    }
+
+    const sftp = new SftpClient();
+    try {
+      await sftp.connect({
+        host: cfg.host, port: cfg.port,
+        username: cfg.username, password: cfg.password,
+        readyTimeout: 10000,
+      });
+
+      for (const remotePath of candidates) {
+        try {
+          const data = await sftp.get(remotePath);
+          if (data && data.length > 0) {
+            fastify.log.debug({ remotePath }, 'stream: found via SFTP');
+            reply.header('Content-Type', 'audio/wav');
+            reply.header('Cache-Control', 'public, max-age=3600');
+            return reply.send(data);
+          }
+        } catch { /* try next candidate */ }
+      }
+
+      fastify.log.warn({ candidates }, 'stream: file not found on remote server');
+      return reply.code(404).send({ error: 'Audio file not found on FusionPBX server' });
+    } catch (err) {
+      fastify.log.error({ err }, 'stream: SFTP connection failed');
+      return reply.code(502).send({ error: 'Could not connect to FusionPBX server via SFTP' });
+    } finally {
+      await sftp.end().catch(() => {});
+    }
+  });
+
   // ── GET /api/assets/sounds ───────────────────────────────────────────────────
   // Returns all available audio files for a domain:
   //   • Custom recordings from v_recordings (domain-specific)

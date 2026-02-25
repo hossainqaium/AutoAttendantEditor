@@ -184,6 +184,12 @@ function BrowseTab({ domainUuid }: { domainUuid: string }) {
   const [loading, setLoading] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [copied, setCopied] = useState('');
+  const [playingPath, setPlayingPath] = useState('');
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+  }, []);
 
   useEffect(() => {
     if (!domainUuid) return;
@@ -221,13 +227,32 @@ function BrowseTab({ domainUuid }: { domainUuid: string }) {
     setTimeout(() => setCopied(''), 1500);
   };
 
+  const togglePlay = (filePath: string) => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    if (playingPath === filePath) {
+      setPlayingPath('');
+      return;
+    }
+    const url = `/api/assets/sounds/stream?path=${encodeURIComponent(filePath)}`
+      + (domainUuid ? `&domainUuid=${encodeURIComponent(domainUuid)}` : '');
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.play().catch(() => setPlayingPath(''));
+    audio.onended = () => setPlayingPath('');
+    audio.onerror = () => setPlayingPath('');
+    setPlayingPath(filePath);
+  };
+
   const toggle = (cat: string) =>
     setCollapsed((p) => ({ ...p, [cat]: !p[cat] }));
 
   const totalCount = allCategories.reduce((s, c) => s + c.files.length, 0);
 
   return (
-    <div className="flex flex-col h-full gap-3">
+    <div className="flex flex-col flex-1 min-h-0 gap-3">
       {/* Search */}
       <div className="relative">
         <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
@@ -283,6 +308,21 @@ function BrowseTab({ domainUuid }: { domainUuid: string }) {
                       <p className="text-[11px] font-medium text-gray-700 truncate">{f.label}</p>
                       <p className="text-[9px] text-gray-400 font-mono truncate">{f.path}</p>
                     </div>
+                    <button
+                      onClick={() => togglePlay(f.path)}
+                      title={playingPath === f.path ? 'Stop' : 'Play'}
+                      className={cn(
+                        'px-1.5 py-0.5 rounded border transition-all shrink-0',
+                        playingPath === f.path
+                          ? 'opacity-100 border-red-300 bg-red-50 text-red-500 hover:bg-red-100'
+                          : 'opacity-0 group-hover:opacity-100 border-gray-200 text-gray-500 hover:bg-indigo-100 hover:border-indigo-300 hover:text-indigo-600',
+                      )}
+                    >
+                      {playingPath === f.path
+                        ? <Square size={10} className="fill-current"/>
+                        : <Play   size={10} className="fill-current"/>
+                      }
+                    </button>
                     <button
                       onClick={() => copyPath(f.path)}
                       title="Copy path"

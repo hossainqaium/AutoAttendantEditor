@@ -78,7 +78,9 @@ async function start() {
     await fastify.register(require('./routes/dids'));
     await fastify.register(require('./routes/secrets'));
     await fastify.register(require('./routes/callLogs'));
+    await fastify.register(require('./routes/cdr'));
     await fastify.register(require('./routes/assets'));
+    await fastify.register(require('./routes/extensions'));
   }, { prefix: '/api' });
 
   // Global error handler
@@ -92,7 +94,7 @@ async function start() {
   });
 
   const host = process.env.HOST || '0.0.0.0';
-  const port = parseInt(process.env.PORT || '3001');
+  const port = parseInt(process.env.PORT || '3002');
 
   await app.listen({ host, port });
   app.log.info(`IVR Studio API listening on http://${host}:${port}`);

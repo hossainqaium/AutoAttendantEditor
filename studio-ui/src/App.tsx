@@ -2,26 +2,29 @@
 // IVR Studio: Main Application
 // =============================================================================
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { FlowEditor } from './components/FlowEditor';
 import { useFlowStore } from './store/flowStore';
 import {
   getDomains, getFlows, getFlow, createFlow, saveFlow, publishFlow,
   rollbackFlow, getVersions, getVersionFull, getDids, assignDid, deleteDid,
   getSecrets, upsertSecret, deleteSecret,
-  type Flow, type IvrVersion, type DidRoute, type Secret,
+  getExtensions, createExtension, updateExtension, deleteExtension,
+  getCdr,
+  type Flow, type IvrVersion, type DidRoute, type Secret, type Extension,
+  type CdrRecord,
 } from './api/client';
 import { validateAndCompile } from './compiler/graphCompiler';
 import {
   Phone, GitBranch, RefreshCw, Check, AlertTriangle,
-  Plus, Upload, RotateCcw, Trash2, Key, List, LayoutTemplate, PhoneCall, Music,
+  Plus, Upload, RotateCcw, Trash2, Key, List, LayoutTemplate, PhoneCall, Music, UserPlus, Pencil,
 } from 'lucide-react';
 import { cn } from './lib/utils';
 import { TemplatesModal } from './components/TemplatesModal';
 import { AudioManagerModal } from './components/AudioManagerModal';
 import type { IvrTemplate, RouteType } from './api/client';
 
-type Tab = 'editor' | 'dids' | 'secrets' | 'logs';
+type Tab = 'editor' | 'extensions' | 'dids' | 'secrets' | 'logs';
 
 export default function App() {
   const {
@@ -46,6 +49,7 @@ export default function App() {
   const [showNewFlow, setShowNewFlow] = useState(false);
   const [newFlowName, setNewFlowName] = useState('');
   const [dids, setDids] = useState<DidRoute[]>([]);
+  const [extensions, setExtensions] = useState<Extension[]>([]);
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [showVersions, setShowVersions] = useState(false);
   const [showTemplates, setShowTemplates]       = useState(false);
@@ -244,6 +248,14 @@ export default function App() {
   };
   useEffect(() => { if (tab === 'dids' && selectedDomain) loadDids(); }, [tab, selectedDomain]);
 
+  const loadExtensions = async () => {
+    if (!selectedDomain) return;
+    const list = await getExtensions(selectedDomain.domain_uuid);
+    setExtensions(list);
+    return list;
+  };
+  useEffect(() => { if ((tab === 'extensions' || tab === 'logs') && selectedDomain) loadExtensions(); }, [tab, selectedDomain]);
+
   // Load DIDs for active flow (shown in sidebar)
   useEffect(() => {
     if (!selectedDomain || !activeFlow) { setFlowDids([]); return; }
@@ -324,10 +336,11 @@ export default function App() {
         {/* Tab nav */}
         <nav className="flex gap-1 ml-2">
           {([
-            { id: 'editor',  label: 'Editor',  icon: <GitBranch size={13}/> },
-            { id: 'dids',    label: 'DIDs',    icon: <Phone size={13}/> },
-            { id: 'secrets', label: 'Secrets', icon: <Key size={13}/> },
-            { id: 'logs',    label: 'Logs',    icon: <List size={13}/> },
+            { id: 'editor',     label: 'Editor',     icon: <GitBranch size={13}/> },
+            { id: 'extensions', label: 'Extensions', icon: <UserPlus size={13}/> },
+            { id: 'dids',       label: 'DIDs',       icon: <Phone size={13}/> },
+            { id: 'secrets',    label: 'Secrets',    icon: <Key size={13}/> },
+            { id: 'logs',       label: 'Logs',       icon: <List size={13}/> },
           ] as const).map((t) => (
             <button
               key={t.id}
@@ -541,12 +554,16 @@ export default function App() {
               {selectedDomain ? 'Select or create a flow to start editing' : 'Select a domain to get started'}
             </div>
           )
+        ) : tab === 'extensions' ? (
+          <ExtensionsTab domainUuid={selectedDomain?.domain_uuid} domains={domains} extensions={extensions} onRefresh={loadExtensions} showToast={showToast} />
         ) : tab === 'dids' ? (
           <DidsTab domainUuid={selectedDomain?.domain_uuid} flows={flows} dids={dids} onRefresh={loadDids} showToast={showToast} />
         ) : tab === 'secrets' ? (
           <SecretsTab domainUuid={selectedDomain?.domain_uuid} secrets={secrets} onRefresh={loadSecrets} showToast={showToast} />
+        ) : tab === 'logs' ? (
+          <LogsTab domainUuid={selectedDomain?.domain_uuid} extensions={extensions} showToast={showToast} />
         ) : (
-          <div className="flex-1 p-8 text-gray-400 text-sm">Call logs coming soon</div>
+          null
         )}
       </div>
 
@@ -605,6 +622,665 @@ export default function App() {
           {toast.msg}
         </div>
       )}
+    </div>
+  );
+}
+
+// ── Extensions Tab ──────────────────────────────────────────────────────────
+function ExtensionsTab({
+  domainUuid,
+  domains,
+  extensions,
+  onRefresh,
+  showToast,
+}: {
+  domainUuid?: string;
+  domains: import('./api/client').Domain[];
+  extensions: Extension[];
+  onRefresh: () => void;
+  showToast: (m: string, t?: 'ok' | 'err') => void;
+}) {
+  const [showForm, setShowForm] = useState(false);
+  const [editing, setEditing] = useState<Extension | null>(null);
+  const [formDomainUuid, setFormDomainUuid] = useState(domainUuid || '');
+  const [extension, setExtension] = useState('');
+  const [password, setPassword] = useState('');
+  const [callerIdName, setCallerIdName] = useState('');
+  const [callerIdNumber, setCallerIdNumber] = useState('');
+  const [context, setContext] = useState('');
+  const [description, setDescription] = useState('');
+  const [enabled, setEnabled] = useState(true);
+  const [voicemailEnabled, setVoicemailEnabled] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<Extension | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // When the selected domain changes from the outside, update the form default
+  useEffect(() => {
+    if (!editing) {
+      setFormDomainUuid(domainUuid || '');
+      const d = domains.find((x) => x.domain_uuid === domainUuid);
+      setContext(d?.domain_name || '');
+    }
+  }, [domainUuid]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When the in-form domain dropdown changes, auto-fill context with that domain's name
+  const handleFormDomainChange = (uuid: string) => {
+    setFormDomainUuid(uuid);
+    const d = domains.find((x) => x.domain_uuid === uuid);
+    setContext(d?.domain_name || '');
+  };
+
+  const resetForm = () => {
+    setEditing(null);
+    setFormDomainUuid(domainUuid || '');
+    setExtension('');
+    setPassword('');
+    setCallerIdName('');
+    setCallerIdNumber('');
+    const d = domains.find((x) => x.domain_uuid === domainUuid);
+    setContext(d?.domain_name || '');
+    setDescription('');
+    setEnabled(true);
+    setVoicemailEnabled(true);
+    setShowForm(false);
+  };
+
+  const openAdd = () => {
+    resetForm();
+    setShowForm(true);
+  };
+
+  const openEdit = (ext: Extension) => {
+    setEditing(ext);
+    setFormDomainUuid(ext.domain_uuid);
+    setExtension(ext.extension);
+    setPassword('');
+    setCallerIdName(ext.effective_caller_id_name || '');
+    setCallerIdNumber(ext.effective_caller_id_number || '');
+    setContext(ext.context || ext.domain_name || '');
+    setDescription(ext.description || '');
+    setEnabled(ext.enabled === true || ext.enabled === 'true');
+    setVoicemailEnabled(ext.voicemail_enabled !== false);
+    setShowForm(true);
+  };
+
+  const handleSave = async () => {
+    if (!formDomainUuid) {
+      showToast('Select a domain', 'err');
+      return;
+    }
+    if (!extension.trim()) {
+      showToast('Extension number is required', 'err');
+      return;
+    }
+    if (!editing && !password.trim()) {
+      showToast('Password is required for new extension', 'err');
+      return;
+    }
+    setSaving(true);
+    try {
+      if (editing) {
+        await updateExtension(editing.extension_uuid, {
+          domainUuid: formDomainUuid,
+          extension: extension.trim(),
+          ...(password.trim() ? { password: password.trim() } : {}),
+          effective_caller_id_name: callerIdName.trim() || undefined,
+          effective_caller_id_number: callerIdNumber.trim() || undefined,
+          description: description.trim() || undefined,
+          enabled,
+          user_context: context.trim() || undefined,
+          voicemail_enabled: voicemailEnabled,
+        });
+        showToast('Extension updated');
+      } else {
+        await createExtension({
+          domainUuid: formDomainUuid,
+          extension: extension.trim(),
+          password: password.trim(),
+          effective_caller_id_name: callerIdName.trim() || extension.trim(),
+          effective_caller_id_number: callerIdNumber.trim() || undefined,
+          description: description.trim() || undefined,
+          enabled,
+          user_context: context.trim() || undefined,
+          voicemail_enabled: voicemailEnabled,
+        });
+        showToast('Extension added');
+      }
+      resetForm();
+      onRefresh();
+    } catch (e: unknown) {
+      showToast((e as Error).message, 'err');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm || !domainUuid) return;
+    setDeleting(true);
+    try {
+      await deleteExtension(deleteConfirm.extension_uuid, domainUuid);
+      setDeleteConfirm(null);
+      onRefresh();
+      showToast('Extension deleted');
+    } catch (e: unknown) {
+      showToast((e as Error).message, 'err');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="flex-1 p-6 overflow-auto max-w-4xl">
+      <h2 className="font-semibold text-base mb-1">Extensions</h2>
+      <p className="text-xs text-gray-400 mb-4">
+        Manage FusionPBX SIP extensions. Add, edit, or remove extensions for this domain.
+      </p>
+
+      {domainUuid ? (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <button
+              onClick={openAdd}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 transition-colors"
+            >
+              <Plus size={14} /> Add
+            </button>
+          </div>
+
+          {showForm && (
+            <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6 shadow-sm">
+              <p className="text-xs font-semibold text-gray-700 mb-3">
+                {editing ? 'Edit Extension' : 'New Extension'}
+              </p>
+              <div className="grid grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Domain</label>
+                  <select
+                    value={formDomainUuid}
+                    onChange={(e) => handleFormDomainChange(e.target.value)}
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    disabled={!!editing}
+                  >
+                    <option value="">Select domain…</option>
+                    {domains.map((d) => (
+                      <option key={d.domain_uuid} value={d.domain_uuid}>{d.domain_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">
+                    Context
+                    <span className="ml-1 text-gray-400 font-normal">(defaults to domain)</span>
+                  </label>
+                  <input
+                    value={context}
+                    onChange={(e) => setContext(e.target.value)}
+                    placeholder="e.g. 192.168.0.113"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Extension number</label>
+                  <input
+                    value={extension}
+                    onChange={(e) => setExtension(e.target.value)}
+                    placeholder="e.g. 1001"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full font-mono"
+                    disabled={!!editing}
+                  />
+                </div>
+                {!editing && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 block mb-1">Password</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="SIP password"
+                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full"
+                    />
+                  </div>
+                )}
+                {editing && (
+                  <div>
+                    <label className="text-xs font-medium text-gray-600 block mb-1">New password (leave blank to keep)</label>
+                    <input
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="Optional"
+                      className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full"
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Caller ID name</label>
+                  <input
+                    value={callerIdName}
+                    onChange={(e) => setCallerIdName(e.target.value)}
+                    placeholder="Display name"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Caller ID number</label>
+                  <input
+                    value={callerIdNumber}
+                    onChange={(e) => setCallerIdNumber(e.target.value)}
+                    placeholder="Optional"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-xs font-medium text-gray-600 block mb-1">Description</label>
+                  <input
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Optional"
+                    className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full"
+                  />
+                </div>
+                <div className="col-span-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="ext-enabled"
+                    checked={enabled}
+                    onChange={(e) => setEnabled(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  <label htmlFor="ext-enabled" className="text-xs text-gray-600">Enabled</label>
+                </div>
+                <div className="col-span-2 flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="ext-voicemail"
+                    checked={voicemailEnabled}
+                    onChange={(e) => setVoicemailEnabled(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  <label htmlFor="ext-voicemail" className="text-xs text-gray-600">Voicemail enabled</label>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+                >
+                  {saving ? 'Saving…' : editing ? 'Update' : 'Add'}
+                </button>
+                <button
+                  onClick={resetForm}
+                  className="px-4 py-1.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {extensions.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-8">No extensions yet. Click Add to create one.</p>
+          ) : (
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="border-b text-xs text-gray-500 text-left">
+                  <th className="py-2 pr-4">Extension</th>
+                  <th className="py-2 pr-4">Caller ID Name</th>
+                  <th className="py-2 pr-4">Domain</th>
+                  <th className="py-2 pr-4">Context</th>
+                  <th className="py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {extensions.map((ext) => (
+                  <tr key={ext.extension_uuid} className="border-b hover:bg-gray-50">
+                    <td className="py-2 pr-4 font-mono font-semibold text-indigo-700">{ext.extension}</td>
+                    <td className="py-2 pr-4">{ext.effective_caller_id_name || '—'}</td>
+                    <td className="py-2 pr-4 text-gray-500 text-xs">{ext.domain_name || '—'}</td>
+                    <td className="py-2 pr-4 font-mono text-xs text-gray-500">{ext.context || '—'}</td>
+                    <td className="py-2 flex gap-1">
+                      <button
+                        title="Edit"
+                        onClick={() => openEdit(ext)}
+                        className="p-1.5 rounded text-gray-500 hover:text-indigo-600 hover:bg-indigo-50"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                      <button
+                        title="Delete"
+                        onClick={() => setDeleteConfirm(ext)}
+                        className="p-1.5 rounded text-gray-500 hover:text-red-600 hover:bg-red-50"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {deleteConfirm && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+              <div className="bg-white rounded-xl shadow-xl p-5 max-w-sm w-full mx-4">
+                <p className="font-medium text-sm text-gray-800 mb-1">Delete extension?</p>
+                <p className="text-xs text-gray-500 mb-4">
+                  Extension <span className="font-mono font-semibold">{deleteConfirm.extension}</span> will be removed from FusionPBX. This cannot be undone.
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleDelete}
+                    disabled={deleting}
+                    className="flex-1 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                  >
+                    {deleting ? 'Deleting…' : 'Delete'}
+                  </button>
+                  <button
+                    onClick={() => setDeleteConfirm(null)}
+                    disabled={deleting}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium border border-gray-200 text-gray-600 hover:bg-gray-50"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      ) : (
+        <p className="text-gray-400 text-sm">Select a domain first</p>
+      )}
+    </div>
+  );
+}
+
+// ── Logs Tab (FusionPBX CDR) ─────────────────────────────────────────────────
+function LogsTab({
+  domainUuid,
+  extensions,
+  showToast,
+}: {
+  domainUuid?: string;
+  extensions: Extension[];
+  showToast: (m: string, t?: 'ok' | 'err') => void;
+}) {
+  const [startDateTime, setStartDateTime] = useState('');
+  const [endDateTime, setEndDateTime] = useState('');
+  const [selectedExtensions, setSelectedExtensions] = useState<string[]>([]);
+  const [cdrRows, setCdrRows] = useState<CdrRecord[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const formatDateForInput = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    const h = String(d.getHours()).padStart(2, '0');
+    const min = String(d.getMinutes()).padStart(2, '0');
+    return `${y}-${m}-${day}T${h}:${min}`;
+  };
+
+  useEffect(() => {
+    const now = new Date();
+    const start = new Date(now);
+    start.setDate(start.getDate() - 1);
+    if (!startDateTime) setStartDateTime(formatDateForInput(start));
+    if (!endDateTime) setEndDateTime(formatDateForInput(now));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleApply = async () => {
+    if (!domainUuid) {
+      showToast('Select a domain first', 'err');
+      return;
+    }
+    setError(null);
+    setLoading(true);
+    try {
+      const rows = await getCdr(domainUuid, {
+        startDateTime: startDateTime || undefined,
+        endDateTime: endDateTime || undefined,
+        extensions: selectedExtensions.length > 0 ? selectedExtensions : undefined,
+      });
+      setCdrRows(rows);
+      showToast(rows.length === 0 ? 'No CDR records found' : `${rows.length} call(s) found`);
+    } catch (e: unknown) {
+      const msg = (e as Error).message;
+      const displayMsg = msg;
+      setError(displayMsg);
+      setCdrRows([]);
+      showToast(displayMsg, 'err');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const [extDropdownOpen, setExtDropdownOpen] = useState(false);
+  const [extSearch, setExtSearch] = useState('');
+  const extDropdownRef = useRef<HTMLDivElement>(null);
+
+  const toggleExtension = (ext: string) => {
+    setSelectedExtensions((prev) =>
+      prev.includes(ext) ? prev.filter((e) => e !== ext) : [...prev, ext]
+    );
+  };
+
+  const filteredExtensions = useMemo(() => {
+    if (!extSearch.trim()) return extensions;
+    const q = extSearch.trim().toLowerCase();
+    return extensions.filter(
+      (e) =>
+        e.extension.toLowerCase().includes(q) ||
+        (e.effective_caller_id_name?.toLowerCase().includes(q) ?? false)
+    );
+  }, [extensions, extSearch]);
+
+  useEffect(() => {
+    if (!extDropdownOpen) return;
+    const onDocClick = (ev: MouseEvent) => {
+      if (extDropdownRef.current && !extDropdownRef.current.contains(ev.target as Node)) {
+        setExtDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [extDropdownOpen]);
+
+  const formatStamp = (s: string | null) => {
+    if (!s) return '—';
+    try {
+      const d = new Date(s);
+      return d.toLocaleString(undefined, { dateStyle: 'short', timeStyle: 'medium' });
+    } catch {
+      return s;
+    }
+  };
+
+  if (!domainUuid) {
+    return (
+      <div className="flex-1 p-8 text-gray-400 text-sm">Select a domain to view call logs (CDR)</div>
+    );
+  }
+
+  return (
+    <div className="flex-1 p-6 overflow-auto">
+      <h2 className="font-semibold text-base mb-1">Call Logs (CDR)</h2>
+      <p className="text-xs text-gray-400 mb-5">
+        Filter by start/end datetime and extensions, then click Apply to load FusionPBX call detail records.
+      </p>
+
+      {/* Filters */}
+      <div className="bg-white border border-gray-200 rounded-xl p-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">Start date & time</label>
+            <input
+              type="datetime-local"
+              value={startDateTime}
+              onChange={(e) => setStartDateTime(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">End date & time</label>
+            <input
+              type="datetime-local"
+              value={endDateTime}
+              onChange={(e) => setEndDateTime(e.target.value)}
+              className="border border-gray-200 rounded-lg px-3 py-1.5 text-sm w-full focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            />
+          </div>
+        </div>
+        <div className="mb-4" ref={extDropdownRef}>
+          <label className="text-xs font-medium text-gray-600 block mb-2">Extensions (optional — leave empty for all)</label>
+          {/* Selected extensions as chips on top */}
+          {selectedExtensions.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-2">
+              {selectedExtensions.map((extNum) => {
+                const ext = extensions.find((e) => e.extension === extNum);
+                return (
+                  <span
+                    key={extNum}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-indigo-100 text-indigo-800 text-xs font-mono"
+                  >
+                    {extNum}
+                    {ext?.effective_caller_id_name && ext.effective_caller_id_name !== extNum && (
+                      <span className="text-indigo-600 truncate max-w-[60px]">({ext.effective_caller_id_name})</span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => toggleExtension(extNum)}
+                      className="ml-0.5 text-indigo-500 hover:text-indigo-700 focus:outline-none"
+                      aria-label={`Remove ${extNum}`}
+                    >
+                      ×
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+          {/* Dropdown with search and reset */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setExtDropdownOpen((o) => !o)}
+              className="w-full sm:max-w-xs flex items-center justify-between gap-2 border border-gray-200 rounded-lg px-3 py-1.5 text-sm text-left bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+            >
+              <span className="text-gray-600 truncate">
+                {extensions.length === 0
+                  ? 'No extensions'
+                  : selectedExtensions.length === 0
+                    ? 'Select extensions…'
+                    : `${selectedExtensions.length} selected`}
+              </span>
+              <span className={cn('text-gray-400 transition-transform', extDropdownOpen && 'rotate-180')}>▾</span>
+            </button>
+            {extDropdownOpen && (
+              <div className="absolute left-0 top-full mt-1 z-20 w-full sm:max-w-xs border border-gray-200 rounded-lg bg-white shadow-lg py-1 max-h-64 flex flex-col">
+                <div className="p-1.5 border-b border-gray-100">
+                  <input
+                    type="text"
+                    placeholder="Search extensions…"
+                    value={extSearch}
+                    onChange={(e) => setExtSearch(e.target.value)}
+                    className="w-full border border-gray-200 rounded px-2 py-1 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-400"
+                  />
+                </div>
+                {selectedExtensions.length > 0 && (
+                  <div className="px-2 py-1 border-b border-gray-100">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedExtensions([])}
+                      className="text-xs text-red-600 hover:text-red-700 font-medium"
+                    >
+                      Reset — unselect all
+                    </button>
+                  </div>
+                )}
+                <div className="overflow-y-auto min-h-0 flex-1">
+                  {filteredExtensions.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-gray-400">No extensions match</p>
+                  ) : (
+                    filteredExtensions.map((ext) => {
+                      const isSelected = selectedExtensions.includes(ext.extension);
+                      return (
+                        <button
+                          key={ext.extension_uuid}
+                          type="button"
+                          onClick={() => toggleExtension(ext.extension)}
+                          className={cn(
+                            'w-full text-left px-3 py-1.5 text-sm flex items-center gap-2 hover:bg-gray-50',
+                            isSelected && 'bg-indigo-50 text-indigo-700'
+                          )}
+                        >
+                          <span className="font-mono">{ext.extension}</span>
+                          {ext.effective_caller_id_name && ext.effective_caller_id_name !== ext.extension && (
+                            <span className="text-gray-500 truncate">{ext.effective_caller_id_name}</span>
+                          )}
+                          {isSelected && <span className="ml-auto text-indigo-500">✓</span>}
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <button
+          onClick={handleApply}
+          disabled={loading}
+          className="px-4 py-1.5 rounded-lg text-sm font-medium bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50"
+        >
+          {loading ? 'Loading…' : 'Apply'}
+        </button>
+        {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+      </div>
+
+      {/* CDR table */}
+      <div className="border border-gray-200 rounded-xl overflow-hidden">
+        {cdrRows.length === 0 && !loading ? (
+          <div className="p-8 text-center text-sm text-gray-400">
+            Set filters and click Apply to load call records
+          </div>
+        ) : (
+          <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead className="bg-gray-50 sticky top-0">
+                <tr className="border-b text-xs text-gray-500 text-left">
+                  <th className="py-2 px-2 whitespace-nowrap">Start</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Extension</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Caller ID Name</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Caller ID Number</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Destination</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Direction</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Duration</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Hangup</th>
+                  <th className="py-2 px-2 whitespace-nowrap">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cdrRows.map((r) => (
+                  <tr key={r.sip_call_id} className="border-b hover:bg-gray-50">
+                    <td className="py-1.5 px-2 whitespace-nowrap text-gray-700">{formatStamp(r.start_stamp)}</td>
+                    <td className="py-1.5 px-2 font-mono text-indigo-700">{r.extension ?? '—'}</td>
+                    <td className="py-1.5 px-2 truncate max-w-[120px]" title={r.caller_id_name ?? ''}>{r.caller_id_name ?? '—'}</td>
+                    <td className="py-1.5 px-2 font-mono text-gray-700">{r.caller_id_number ?? '—'}</td>
+                    <td className="py-1.5 px-2 font-mono text-gray-700">{r.destination_number ?? '—'}</td>
+                    <td className="py-1.5 px-2 text-gray-600">{r.direction ?? '—'}</td>
+                    <td className="py-1.5 px-2">{r.duration != null ? `${r.duration}s` : '—'}</td>
+                    <td className="py-1.5 px-2 text-gray-600">{r.hangup_cause ?? '—'}</td>
+                    <td className="py-1.5 px-2 text-gray-600">{r.status ?? r.call_disposition ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
