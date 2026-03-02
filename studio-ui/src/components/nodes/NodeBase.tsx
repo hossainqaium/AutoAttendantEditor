@@ -19,7 +19,35 @@ export interface NodeBaseProps {
 
 export function NodeBase({ nodeId, label, icon, color, selected, children, handles }: NodeBaseProps) {
   const setHoveredHandle = useFlowStore((s) => s.setHoveredHandle);
+  const edges = useFlowStore((s) => s.edges);
   const outputs = handles?.outputs || [{ id: 'next', label: 'next' }];
+
+  const isOutputConnected = useCallback(
+    (handleId: string) =>
+      edges.some((e) => {
+        if (e.source !== nodeId) return false;
+        if (e.sourceHandle === handleId) return true;
+        if (outputs.length === 1) return true;
+        return false;
+      }),
+    [edges, nodeId, outputs.length]
+  );
+
+  const isTargetConnected = edges.some((e) => e.target === nodeId);
+
+  const handleSize = { width: 10, height: 10, borderWidth: 2 };
+  const connectedStyle: React.CSSProperties = {
+    ...handleSize,
+    backgroundColor: '#10b981',
+    borderColor: '#059669',
+    borderStyle: 'solid',
+  };
+  const unconnectedStyle: React.CSSProperties = {
+    ...handleSize,
+    backgroundColor: '#9ca3af',
+    borderColor: '#6b7280',
+    borderStyle: 'solid',
+  };
 
   // Stable hover callbacks
   const onSourceEnter = useCallback((handleId: string) => () => {
@@ -52,18 +80,19 @@ export function NodeBase({ nodeId, label, icon, color, selected, children, handl
         <div className="px-3 py-2 text-xs text-gray-600 space-y-1">{children}</div>
       )}
 
-      {/* Output handles (right side — violet by default via CSS) */}
+      {/* Output handles (right side — green when connected, slate when not) */}
       {outputs.map((out, idx) => {
         const top = outputs.length === 1
           ? '50%'
           : `${10 + (idx * 80) / (outputs.length - 1)}%`;
+        const connected = isOutputConnected(out.id);
         return (
           <Handle
             key={out.id}
             type="source"
             position={Position.Right}
             id={out.id}
-            style={{ top }}
+            style={{ ...(connected ? connectedStyle : unconnectedStyle), top }}
             title={out.label}
             onMouseEnter={onSourceEnter(out.id)}
             onMouseLeave={onLeave}
@@ -71,10 +100,11 @@ export function NodeBase({ nodeId, label, icon, color, selected, children, handl
         );
       })}
 
-      {/* Input handle (left side — sky blue by default via CSS) */}
+      {/* Input handle (left side — green when connected, slate when not) */}
       <Handle
         type="target"
         position={Position.Left}
+        style={isTargetConnected ? connectedStyle : unconnectedStyle}
         onMouseEnter={onTargetEnter}
         onMouseLeave={onLeave}
       />

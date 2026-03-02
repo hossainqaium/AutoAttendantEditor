@@ -2,7 +2,8 @@
 // All IVR Studio node type components
 // =============================================================================
 
-import React from 'react';
+import React, { useEffect } from 'react';
+import { useUpdateNodeInternals } from 'reactflow';
 import { useFlowStore } from '../../store/flowStore';
 import { NodeBase } from './NodeBase';
 import {
@@ -28,12 +29,18 @@ export function PlayAudioNode({ id, data, selected }: NodeProps) {
 // Get Digits
 // ---------------------------------------------------------------------------
 export function GetDigitsNode({ id, data, selected }: NodeProps) {
+  const updateNodeInternals = useUpdateNodeInternals();
   const activeDigits = (data.valid_digits as string[] | undefined) || ['1','2'];
   const outputs = [
     ...activeDigits.map((d) => ({ id: d, label: `Press ${d}` })),
     { id: 'timeout', label: 'Timeout' },
     { id: 'invalid', label: 'Invalid' },
   ];
+
+  useEffect(() => {
+    updateNodeInternals(id);
+  }, [id, updateNodeInternals, activeDigits.join(',')]);
+
   return (
     <NodeBase nodeId={id} label={String(data.label || 'Get Digits')} icon={<Hash size={13}/>}
       color="bg-violet-500" selected={selected} handles={{ outputs }}>
