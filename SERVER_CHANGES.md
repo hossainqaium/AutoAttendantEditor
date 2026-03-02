@@ -119,11 +119,41 @@ The `script-directory` param adds the system Lua pure-Lua path as a secondary se
 | `ivr_studio/lib/db.lua` | PostgreSQL helper using `freeswitch.Dbh` |
 | `ivr_studio/lib/http.lua` | HTTP/HTTPS client (LuaSocket + LuaSec, 8s timeout) |
 | `ivr_studio/lib/logger.lua` | Structured JSON call logger |
+| `ivr_studio/cjson/safe.lua` | Optional shim for `cjson.safe` (see §2) |
+
+**Source of truth:** The canonical Lua engine lives in the repo under `lua-engine/`. Deploy updates with:
+```bash
+# From project root
+scp lua-engine/ivr_interpreter.lua user@server:/tmp/
+ssh user@server "sudo cp /tmp/ivr_interpreter.lua /usr/share/freeswitch/scripts/ivr_studio/"
+```
 
 The interpreter uses a **3-level JSON fallback** in case `cjson.safe` is ever unavailable:
 1. `require('cjson.safe')` — preferred (returns nil on error)
 2. `require('cjson')` wrapped in `pcall` — safe fallback
 3. Minimal inline Lua decoder — last resort
+
+### 5.1 Execution graph cache (per-worker)
+
+- Each FreeSWITCH Lua worker keeps an in-memory cache of the **published execution graph** per flow.
+- **TTL:** 5 seconds (`CACHE_TTL_SECS`). After that, the next call reloads from the database.
+- **Version invalidation:** On every call, the interpreter runs a lightweight `SELECT version_id` query. If the published version for that flow has changed (e.g. after re-publish from the Studio UI), the cache is discarded immediately and the full graph is loaded from `ivr_studio.ivr_versions`. This ensures **re-published flows take effect on the very next call** without waiting for TTL expiry.
+- Cache is **not shared** across workers; each worker warms independently.
+
+### 5.2 Get-Digits node behavior (audio order)
+
+The `get_digits` handler in `ivr_interpreter.lua` plays audio in this order:
+
+| Step | When | Config field |
+|------|------|--------------|
+| 1 | Once at the very start, before any prompt | `welcome_audio` |
+| 2 | Each attempt — played by FreeSWITCH `read` app while waiting for DTMF | `prompt_file` |
+| 3 | After **every** failed attempt (no input or invalid digit), including the last retry | `no_input_audio` (fallback: `invalid_audio`) |
+| 4 | Once after all retries are exhausted, before routing to timeout/invalid | `timed_out_audio` |
+
+- **Valid digits:** If `valid_digits` is set, only those digit strings are accepted; otherwise any digit ends the read. Invalid keypresses trigger `no_input_audio` and retry.
+- **Outputs:** The handler returns the digit string (e.g. `"1"`, `"2"`) for valid input, or `"timeout"` / `"invalid"` when retries are exhausted.
+- **Stale DTMF:** The digit variable is cleared with `session:setVariable(var_name, "")` before each `read` to avoid carrying over a previous attempt’s value.
 
 ---
 
@@ -156,15 +186,16 @@ Tables created:
 
 | Table | Purpose |
 |-------|---------|
-| `ivr_studio.ivr_flows` | One row per IVR flow (name, domain, published version pointer) |
-| `ivr_studio.ivr_versions` | Immutable snapshots of the flow graph (nodes + edges as JSONB) |
-| `ivr_studio.ivr_did_routes` | Maps DIDs/extensions to published flow versions |
-| `ivr_studio.flow_secrets` | Encrypted API credentials used by API-call nodes |
-| `ivr_studio.call_logs` | Structured per-call execution logs |
+| `ivr_studio.ivr_flows` | One row per IVR flow (name, domain, draft graph, published version pointer) |
+| `ivr_studio.ivr_versions` | Immutable snapshots of the flow (execution_graph + raw_graph as JSONB); one row per publish |
+| `ivr_studio.ivr_did_routes` | Maps DIDs/extensions to a flow (Lua uses this to resolve inbound calls) |
+| `ivr_studio.flow_secrets` | Encrypted API credentials for API-call nodes ({{secret:key_name}}) |
+| `ivr_studio.call_logs` | Per-call execution logs (trace_id, hops, node_trace, etc.) |
 
 The `fusionpbx` database user was granted full privileges on the `ivr_studio` schema.
 
-Migration file: `db/migrations/001_ivr_studio_schema.sql`
+- **Migration file:** `db/migrations/001_ivr_studio_schema.sql`
+- **Full schema reference:** See `DB_CHANGE.md` in this repo.
 
 ---
 

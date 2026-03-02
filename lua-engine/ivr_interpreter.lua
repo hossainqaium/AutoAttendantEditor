@@ -64,28 +64,44 @@ local logger = require("logger")
 -- CONSTANTS
 -- =============================================================================
 local MAX_NODE_HOPS  = 200   -- hard cap against infinite loops
-local CACHE_TTL_SECS = 30    -- per-worker graph cache TTL
+local CACHE_TTL_SECS = 5     -- per-worker graph cache TTL (short to reduce stale-cache window)
 
 -- =============================================================================
 -- PER-WORKER GRAPH CACHE
 -- Lives in Lua module state — survives across calls on the same FS worker thread.
--- Not shared across workers; each worker warms independently (acceptable).
+-- Not shared across workers; each worker warms independently.
+--
+-- Cache entry stores both the graph AND the published version_id.
+-- On each call we do one fast SELECT version_id query; if the version changed
+-- (i.e. the flow was re-published) the cache is immediately invalidated even
+-- before the TTL expires, guaranteeing all workers pick up new graphs quickly.
 -- =============================================================================
 local graph_cache = {}
 
-local function cache_get(flow_id)
+-- cache_get(flow_id, current_version_id):
+--   current_version_id — the version_id just fetched from DB (lightweight query).
+--   Returns the cached graph if still valid, or nil if expired / version changed.
+local function cache_get(flow_id, current_version_id)
     local entry = graph_cache[flow_id]
-    if entry and (os.time() - entry.loaded_at) < CACHE_TTL_SECS then
-        return entry.graph
+    if not entry then return nil end
+    -- Immediate invalidation if the published version changed
+    if current_version_id and entry.version_id ~= current_version_id then
+        graph_cache[flow_id] = nil
+        return nil
     end
-    return nil
+    -- TTL-based expiry
+    if (os.time() - entry.loaded_at) >= CACHE_TTL_SECS then
+        graph_cache[flow_id] = nil
+        return nil
+    end
+    return entry.graph
 end
 
-local function cache_set(flow_id, graph)
-    graph_cache[flow_id] = { graph = graph, loaded_at = os.time() }
+local function cache_set(flow_id, graph, version_id)
+    graph_cache[flow_id] = { graph = graph, loaded_at = os.time(), version_id = version_id }
 end
 
--- Invalidate a specific flow's cache (called via API after publish)
+-- Invalidate a specific flow's cache entry
 local function cache_invalidate(flow_id)
     graph_cache[flow_id] = nil
 end
@@ -167,28 +183,44 @@ local flow_id = route_row.flow_id
 log:info("Route resolved", { flow_id = flow_id })
 
 -- =============================================================================
--- STEP 2: Load execution graph (with per-worker cache)
+-- STEP 2: Load execution graph (with per-worker cache + version invalidation)
 -- =============================================================================
-local graph      = cache_get(flow_id)
-local version_id = nil   -- tracked for call_log
+
+-- Lightweight query — only fetches the UUID, not the full execution_graph JSON.
+-- Used to detect whether the flow was re-published since we last cached it.
+local ver_check_sql = string.format(
+    "SELECT version_id FROM ivr_studio.ivr_versions " ..
+    "WHERE flow_id = %s AND domain_uuid = %s AND status = 'published' LIMIT 1",
+    db.escape_uuid(flow_id),
+    db.escape_uuid(domain_uuid)
+)
+local ver_check = db.query_one(ver_check_sql)
+
+if not ver_check then
+    log:error("No published IVR version found", { flow_id = flow_id })
+    session:execute("playback", "ivr/ivr-call_cannot_be_completed_as_dialed.wav")
+    session:hangup("NORMAL_CLEARING")
+    return
+end
+
+local current_version_id = ver_check.version_id
+local graph      = cache_get(flow_id, current_version_id)
+local version_id = current_version_id  -- tracked for call_log
 
 if not graph then
+    -- Cache miss (expired, invalidated, or first call) — load full graph
     local ver_sql = string.format(
-        "SELECT version_id, execution_graph FROM ivr_studio.ivr_versions " ..
-        "WHERE flow_id = %s AND domain_uuid = %s AND status = 'published' LIMIT 1",
-        db.escape_uuid(flow_id),
-        db.escape_uuid(domain_uuid)
+        "SELECT execution_graph FROM ivr_studio.ivr_versions " ..
+        "WHERE version_id = %s LIMIT 1",
+        db.escape_uuid(current_version_id)
     )
     local ver_row = db.query_one(ver_sql)
 
     if not ver_row then
-        log:error("No published IVR version found", { flow_id = flow_id })
-        session:execute("playback", "ivr/ivr-call_cannot_be_completed_as_dialed.wav")
+        log:error("Failed to load execution_graph", { version_id = current_version_id })
         session:hangup("NORMAL_CLEARING")
         return
     end
-
-    version_id = ver_row.version_id  -- save for call_log INSERT
 
     local decode_err
     graph, decode_err = json.decode(ver_row.execution_graph)
@@ -198,10 +230,10 @@ if not graph then
         return
     end
 
-    cache_set(flow_id, graph)
+    cache_set(flow_id, graph, current_version_id)
     log:info("Graph loaded from DB", { flow_id = flow_id, version = version_id })
 else
-    log:info("Graph served from cache", { flow_id = flow_id })
+    log:info("Graph served from cache", { flow_id = flow_id, version = version_id })
 end
 
 -- Validate graph structure
@@ -255,35 +287,78 @@ end
 -- GET DIGITS
 -- ---------------------------------------------------------------------------
 handlers["get_digits"] = function(cfg)
-    local timeout_ms  = cfg.timeout_ms or 5000
-    local min_digits  = cfg.min_digits or 1
-    local max_digits  = cfg.max_digits or 1
-    local retries     = cfg.retries or 3
-    local prompt_file = cfg.prompt_file and interpolate(cfg.prompt_file, ivr_vars)
-                        or "silence_stream://200"
-    local invalid_audio = cfg.invalid_audio or "ivr/ivr-that_was_an_invalid_entry.wav"
-    local var_name    = "ivr_dtmf_" .. call_uuid  -- unique var per call
+    local timeout_ms      = cfg.timeout_ms or 5000
+    local min_digits      = cfg.min_digits or 1
+    local max_digits      = cfg.max_digits or 1
+    local retries         = cfg.retries or 3
+    local prompt_file     = cfg.prompt_file and interpolate(cfg.prompt_file, ivr_vars)
+                            or "silence_stream://200"
+    -- no_input_audio plays after every failed attempt (no input OR invalid digit)
+    local no_input_audio  = (cfg.no_input_audio and cfg.no_input_audio ~= "" and interpolate(cfg.no_input_audio, ivr_vars))
+                            or (cfg.invalid_audio and cfg.invalid_audio ~= "" and interpolate(cfg.invalid_audio, ivr_vars))
+                            or ""
+    local welcome_audio   = cfg.welcome_audio and cfg.welcome_audio ~= "" and interpolate(cfg.welcome_audio, ivr_vars) or ""
+    local timed_out_audio = cfg.timed_out_audio and cfg.timed_out_audio ~= "" and interpolate(cfg.timed_out_audio, ivr_vars) or ""
+    local valid_digits    = cfg.valid_digits  -- optional table of valid digit strings
+    local var_name        = "ivr_dtmf_" .. call_uuid
+
+    -- 1. Welcome audio — plays once at the very start, before any prompt
+    if welcome_audio ~= "" then
+        session:execute("playback", welcome_audio)
+    end
+
+    local last_failure = "timeout"  -- "timeout" = no input, "invalid" = wrong digit
 
     for attempt = 1, retries do
+        -- Clear any stale DTMF value left from the previous attempt
+        session:setVariable(var_name, "")
+
+        -- 2. Prompt audio — plays each attempt while FreeSWITCH waits for DTMF
         local read_str = string.format("%d %d %s %s %d #",
             min_digits, max_digits, prompt_file, var_name, timeout_ms)
         session:execute("read", read_str)
 
         local digit = session:getVariable(var_name)
         if digit and digit ~= "" then
-            ivr_vars["last_digits"] = digit
-            log:info("get_digits: input received", { digit = digit, attempt = attempt })
-            -- Return the digit string as the output label (e.g. "1", "2", "*")
-            return tostring(digit)
-        end
+            -- Validate against valid_digits list (if configured)
+            local is_valid = true
+            if valid_digits and type(valid_digits) == "table" and #valid_digits > 0 then
+                is_valid = false
+                for _, v in ipairs(valid_digits) do
+                    if tostring(v) == tostring(digit) then
+                        is_valid = true
+                        break
+                    end
+                end
+            end
 
-        log:info("get_digits: no input", { attempt = attempt, max = retries })
-        if attempt < retries and invalid_audio ~= "" then
-            session:execute("playback", invalid_audio)
+            if is_valid then
+                ivr_vars["last_digits"] = digit
+                log:info("get_digits: valid input", { digit = digit, attempt = attempt })
+                return tostring(digit)
+            else
+                last_failure = "invalid"
+                log:info("get_digits: invalid digit", { digit = digit, attempt = attempt })
+                -- 3. No-input audio — plays after every invalid digit (all attempts)
+                if no_input_audio ~= "" then
+                    session:execute("playback", no_input_audio)
+                end
+            end
+        else
+            last_failure = "timeout"
+            log:info("get_digits: no input", { attempt = attempt, max = retries })
+            -- 3. No-input audio — plays after every missed attempt (all attempts)
+            if no_input_audio ~= "" then
+                session:execute("playback", no_input_audio)
+            end
         end
     end
 
-    return "timeout"
+    -- 4. Timed-out audio — plays once after all retries are exhausted
+    if timed_out_audio ~= "" then
+        session:execute("playback", timed_out_audio)
+    end
+    return last_failure  -- "timeout" or "invalid"
 end
 
 -- ---------------------------------------------------------------------------

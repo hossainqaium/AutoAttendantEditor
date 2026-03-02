@@ -6,7 +6,7 @@
 
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useFlowStore } from '../../store/flowStore';
-import { X, Plus, Trash2, RefreshCw, ChevronDown, Music, Phone, Search, FolderOpen } from 'lucide-react';
+import { X, Plus, Trash2, RefreshCw, ChevronDown, Music, Phone, Search, FolderOpen, Play, Square } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { getRecordings, getDestinations, type Destination, type SoundCategory, type SoundFile } from '../../api/client';
 
@@ -573,11 +573,20 @@ function NodeConfigForm({
       return <>
         {field('Label', 'label', 'text', 'Play Audio')}
         <Field label="Audio File">
-          <AudioFilePicker
-            domainUuid={domainUuid}
-            value={String(data.file || '')}
-            onChange={(v) => set('file', v)}
-          />
+          <div className="flex gap-2 items-start">
+            <div className="flex-1 min-w-0">
+              <AudioFilePicker
+                domainUuid={domainUuid}
+                value={String(data.file || '')}
+                onChange={(v) => set('file', v)}
+              />
+            </div>
+            <AudioPlayButton
+              path={String(data.file || '')}
+              domainUuid={domainUuid}
+              title="Play audio"
+            />
+          </div>
         </Field>
         {field('Dynamic File Variable', 'file_var', 'text', 'e.g. greeting_file')}
       </>;
@@ -585,24 +594,58 @@ function NodeConfigForm({
     case 'get_digits':
       return <>
         {field('Label', 'label', 'text', 'Get Digits')}
+        <Field label="Welcome Audio">
+          <div className="flex gap-2 items-start">
+            <div className="flex-1 min-w-0">
+              <AudioFilePicker
+                domainUuid={domainUuid}
+                value={String(data.welcome_audio || '')}
+                onChange={(v) => set('welcome_audio', v)}
+              />
+            </div>
+            <AudioPlayButton path={String(data.welcome_audio || '')} domainUuid={domainUuid} title="Play welcome" />
+          </div>
+        </Field>
         <Field label="Prompt Audio">
-          <AudioFilePicker
-            domainUuid={domainUuid}
-            value={String(data.prompt_file || '')}
-            onChange={(v) => set('prompt_file', v)}
-          />
+          <div className="flex gap-2 items-start">
+            <div className="flex-1 min-w-0">
+              <AudioFilePicker
+                domainUuid={domainUuid}
+                value={String(data.prompt_file || '')}
+                onChange={(v) => set('prompt_file', v)}
+              />
+            </div>
+            <AudioPlayButton path={String(data.prompt_file || '')} domainUuid={domainUuid} title="Play prompt" />
+          </div>
+        </Field>
+        <Field label="No Input Audio">
+          <div className="flex gap-2 items-start">
+            <div className="flex-1 min-w-0">
+              <AudioFilePicker
+                domainUuid={domainUuid}
+                value={String(data.no_input_audio || data.invalid_audio || '')}
+                onChange={(v) => set('no_input_audio', v)}
+              />
+            </div>
+            <AudioPlayButton path={String(data.no_input_audio || data.invalid_audio || '')} domainUuid={domainUuid} title="Play no input" />
+          </div>
+        </Field>
+        <Field label="Timed Out Audio">
+          <div className="flex gap-2 items-start">
+            <div className="flex-1 min-w-0">
+              <AudioFilePicker
+                domainUuid={domainUuid}
+                value={String(data.timed_out_audio || '')}
+                onChange={(v) => set('timed_out_audio', v)}
+              />
+            </div>
+            <AudioPlayButton path={String(data.timed_out_audio || '')} domainUuid={domainUuid} title="Play timed out" />
+          </div>
         </Field>
         {field('Min Digits', 'min_digits', 'number')}
         {field('Max Digits', 'max_digits', 'number')}
         {field('Timeout (ms)', 'timeout_ms', 'number')}
         {field('Retries', 'retries', 'number')}
-        <Field label="Invalid Input Audio">
-          <AudioFilePicker
-            domainUuid={domainUuid}
-            value={String(data.invalid_audio || '')}
-            onChange={(v) => set('invalid_audio', v)}
-          />
-        </Field>
         <Field label="Valid Digits (outputs)">
           <ValidDigitsEditor
             value={(data.valid_digits as string[]) || ['1', '2']}
@@ -715,6 +758,60 @@ function NodeConfigForm({
 
 // ── Audio File Picker ─────────────────────────────────────────────────────────
 // Built-in FreeSWITCH sounds are always shown from the static BUILTIN_SOUNDS
+// Play button for selected audio path (used in Get Digits config for confirmation)
+function AudioPlayButton({
+  path,
+  domainUuid,
+  title = 'Play',
+}: {
+  path: string;
+  domainUuid?: string;
+  title?: string;
+}) {
+  const [playing, setPlaying] = useState(false);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => () => {
+    audioRef.current?.pause();
+    audioRef.current = null;
+  }, []);
+
+  const toggle = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+      setPlaying(false);
+      return;
+    }
+    if (!path.trim()) return;
+    const url = `/api/assets/sounds/stream?path=${encodeURIComponent(path.trim())}`
+      + (domainUuid ? `&domainUuid=${encodeURIComponent(domainUuid)}` : '');
+    const audio = new Audio(url);
+    audioRef.current = audio;
+    audio.play().catch(() => setPlaying(false));
+    audio.onended = () => { setPlaying(false); audioRef.current = null; };
+    audio.onerror = () => { setPlaying(false); audioRef.current = null; };
+    setPlaying(true);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={toggle}
+      disabled={!path.trim()}
+      title={title}
+      className={cn(
+        'shrink-0 p-2 rounded-lg border transition-colors',
+        path.trim()
+          ? 'border-gray-200 text-gray-600 hover:bg-gray-50 hover:text-indigo-600 hover:border-indigo-300'
+          : 'border-gray-100 text-gray-300 cursor-not-allowed'
+      )}
+    >
+      {playing ? <Square size={14} className="fill-current" /> : <Play size={14} className="fill-current" />}
+    </button>
+  );
+}
+
 // catalog.  Custom recordings are fetched from the server and prepended at the
 // top.  The search box filters what is already visible — no searching required
 // to see the list.
