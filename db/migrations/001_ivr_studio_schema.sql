@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS ivr_studio.ivr_did_routes (
                 REFERENCES ivr_studio.ivr_flows(flow_id) ON DELETE CASCADE,
     enabled     BOOLEAN NOT NULL DEFAULT TRUE,
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    route_type  TEXT    NOT NULL DEFAULT 'both'
+                CHECK (route_type IN ('both', 'public', 'internal')),
     UNIQUE(domain_uuid, destination)
 );
 
